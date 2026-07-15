@@ -57,6 +57,8 @@ function readFile(file){if(!file)return;if(file.size>5*1024*1024){toast('文件�
 const diffLeft=$('#diffLeftInput');
 const diffRight=$('#diffRightInput');
 const diffResult=$('#diffResult');
+const diffLeftHighlight=$('#diffLeftHighlight');
+const diffRightHighlight=$('#diffRightHighlight');
 let diffTimer=null;
 
 function jsonKind(value){return value===null?'null':Array.isArray(value)?'array':typeof value;}
@@ -89,6 +91,44 @@ function compareValues(before,after,path='$',changes=[]){
   return changes;
 }
 function diffValue(value){const text=JSON.stringify(value,null,2);return escapeHtml(text===undefined?String(value):text)}
+function jsonToken(value){
+  if(value===null)return'<span class="json-null">null</span>';
+  const kind=typeof value;
+  if(kind==='string')return`<span class="json-string">${escapeHtml(JSON.stringify(value))}</span>`;
+  if(kind==='number')return`<span class="json-number">${escapeHtml(value)}</span>`;
+  if(kind==='boolean')return`<span class="json-boolean">${value}</span>`;
+  return escapeHtml(value);
+}
+function highlightedJsonLines(value,path='$',depth=0,label=null){
+  const indent='  '.repeat(depth);
+  const property=label===null?'':`<span class="json-key">${escapeHtml(JSON.stringify(label))}</span>: `;
+  const kind=jsonKind(value);
+  if(kind!=='object'&&kind!=='array')return[{path,html:`${indent}${property}${jsonToken(value)}`}];
+  const isArray=kind==='array';
+  const entries=isArray?value.map((item,index)=>[index,item]):Object.entries(value);
+  const lines=[{path,html:`${indent}${property}${isArray?'[':'{'}`}];
+  entries.forEach(([key,item],index)=>{
+    const itemPath=childPath(path,key,isArray);
+    const childLines=highlightedJsonLines(item,itemPath,depth+1,isArray?null:key);
+    if(index<entries.length-1)childLines[childLines.length-1].html+=',';
+    lines.push(...childLines);
+  });
+  lines.push({path,html:`${indent}${isArray?']':'}'}`});
+  return lines;
+}
+function pathMark(path,marks){
+  let result='';let matchLength=-1;
+  marks.forEach((type,markPath)=>{if((path===markPath||path.startsWith(`${markPath}.`)||path.startsWith(`${markPath}[`))&&markPath.length>matchLength){result=type;matchLength=markPath.length}});
+  return result;
+}
+function renderHighlightedEditor(element,highlight,value,changes,side){
+  element.value=JSON.stringify(value,null,2);
+  const marks=new Map();
+  changes.forEach(item=>{if(item.type==='changed'||(side==='left'&&item.type==='removed')||(side==='right'&&item.type==='added'))marks.set(item.path,item.type)});
+  highlight.innerHTML=highlightedJsonLines(value).map(line=>`<span class="json-code-line${pathMark(line.path,marks)?` diff-${pathMark(line.path,marks)}`:''}">${line.html}</span>`).join('');
+  element.scrollTop=0;element.scrollLeft=0;highlight.scrollTop=0;highlight.scrollLeft=0;
+}
+function renderRawEditor(element,highlight){highlight.textContent=element.value;highlight.scrollTop=element.scrollTop;highlight.scrollLeft=element.scrollLeft}
 function parseDiffInput(element,statusElement,label){
   const raw=element.value.trim();
   if(!raw){statusElement.className='';statusElement.textContent=`0 字符 · 等待输入`;return{ok:false,empty:true}}
@@ -111,11 +151,12 @@ function renderDiff(changes){
   $('#diffStatus').textContent=`共 ${changes.length} 个差异 · ${counts.added} 新增 / ${counts.removed} 删除 / ${counts.changed} 修改`;
 }
 function runDiff(notify=false){
+  renderRawEditor(diffLeft,diffLeftHighlight);renderRawEditor(diffRight,diffRightHighlight);
   const left=parseDiffInput(diffLeft,$('#diffLeftStats'),'A');
   const right=parseDiffInput(diffRight,$('#diffRightStats'),'B');
   if(left.empty||right.empty){$('#diffSummary').hidden=true;diffResult.innerHTML='<div class="empty-state"><div class="empty-icon">A<span>≠</span>B</div><strong>等待两个 JSON</strong><p>在上方分别粘贴 JSON，<br>这里会自动按字段路径展示差异。</p></div>';$('#diffStatus').textContent='请在左右两侧都输入 JSON';return}
   if(!left.ok||!right.ok){$('#diffSummary').hidden=true;diffResult.innerHTML='<div class="diff-error"><strong>暂时无法对比</strong><br>请先修正标记为无效的 JSON，系统随后会自动重新对比。</div>';$('#diffStatus').textContent='JSON 格式有误';return}
-  const changes=compareValues(left.value,right.value);renderDiff(changes);if(notify)toast(`对比完成：发现 ${changes.length} 个差异`);
+  const changes=compareValues(left.value,right.value);renderHighlightedEditor(diffLeft,diffLeftHighlight,left.value,changes,'left');renderHighlightedEditor(diffRight,diffRightHighlight,right.value,changes,'right');renderDiff(changes);if(notify)toast(`对比完成：发现 ${changes.length} 个差异`);
 }
 function scheduleDiff(){clearTimeout(diffTimer);diffTimer=setTimeout(()=>runDiff(false),350)}
 function switchMode(mode){
@@ -137,7 +178,8 @@ $('#minifyButton').addEventListener('click',()=>{formattedText=JSON.stringify(pa
 $('#downloadButton').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([formattedText],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='formatted.json';a.click();URL.revokeObjectURL(url);toast('下载已开始')});
 $('#themeButton').addEventListener('click',()=>{document.body.classList.toggle('dark');localStorage.setItem('json-lens-theme',document.body.classList.contains('dark')?'dark':'light')});
 document.querySelectorAll('.mode-tab').forEach(button=>button.addEventListener('click',()=>switchMode(button.dataset.mode)));
-diffLeft.addEventListener('input',scheduleDiff);diffRight.addEventListener('input',scheduleDiff);
+diffLeft.addEventListener('input',()=>{renderRawEditor(diffLeft,diffLeftHighlight);scheduleDiff()});diffRight.addEventListener('input',()=>{renderRawEditor(diffRight,diffRightHighlight);scheduleDiff()});
+diffLeft.addEventListener('scroll',()=>{diffLeftHighlight.scrollTop=diffLeft.scrollTop;diffLeftHighlight.scrollLeft=diffLeft.scrollLeft});diffRight.addEventListener('scroll',()=>{diffRightHighlight.scrollTop=diffRight.scrollTop;diffRightHighlight.scrollLeft=diffRight.scrollLeft});
 $('#compareButton').addEventListener('click',()=>runDiff(true));
 $('#diffSampleButton').addEventListener('click',()=>{diffLeft.value=JSON.stringify(diffSamples.left,null,2);diffRight.value=JSON.stringify(diffSamples.right,null,2);runDiff(true)});
 $('#swapDiffButton').addEventListener('click',()=>{const value=diffLeft.value;diffLeft.value=diffRight.value;diffRight.value=value;runDiff()});
@@ -145,4 +187,4 @@ $('#clearDiffButton').addEventListener('click',()=>{diffLeft.value='';diffRight.
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();$('#diffPage').hidden?formatJson():runDiff(true)}});
 const zone=$('#dropZone');['dragenter','dragover'].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();zone.classList.add('dragging')}));['dragleave','drop'].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();zone.classList.remove('dragging')}));zone.addEventListener('drop',e=>readFile(e.dataTransfer.files[0]));
 if(localStorage.getItem('json-lens-theme')==='dark'||(!localStorage.getItem('json-lens-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
-updateInputStats();
+updateInputStats();renderRawEditor(diffLeft,diffLeftHighlight);renderRawEditor(diffRight,diffRightHighlight);
