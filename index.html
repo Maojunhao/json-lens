@@ -6,24 +6,30 @@
   <meta name="description" content="一个安全、快速、完全在浏览器本地运行的 JSON 格式化与可视化工具。">
   <meta name="color-scheme" content="dark light">
   <title>JSON Lens · JSON 格式化工具</title>
-  <link rel="stylesheet" href="styles.css?v=20260715-3">
+  <link rel="stylesheet" href="styles.css?v=20260715-4">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
   <div class="ambient ambient-two"></div>
   <main class="app-shell">
     <header class="topbar">
-      <a class="brand" href="#" aria-label="JSON Lens 首页">
-        <span class="brand-mark">{ }</span>
-        <span><b>JSON Lens</b><small>本地 · 快速 · 安全</small></span>
-      </a>
+      <div class="brand-zone">
+        <a class="brand" href="#" aria-label="JSON Lens 首页">
+          <span class="brand-mark">{ }</span>
+          <span><b>JSON Lens</b><small>本地 · 快速 · 安全</small></span>
+        </a>
+        <nav class="mode-tabs" aria-label="工具切换">
+          <button class="mode-tab active" data-mode="formatter" type="button">JSON 格式化</button>
+          <button class="mode-tab" data-mode="diff" type="button">差异对比</button>
+        </nav>
+      </div>
       <div class="header-actions">
         <span class="privacy"><i></i> 数据仅在本地处理</span>
         <button class="icon-button" id="themeButton" type="button" title="切换主题" aria-label="切换主题">☼</button>
       </div>
     </header>
 
-    <section class="workspace" id="dropZone">
+    <section class="workspace" id="dropZone" data-page="formatter">
       <div class="panel input-panel">
         <div class="panel-head">
           <div><span class="step">01</span><strong>原始数据</strong></div>
@@ -81,9 +87,48 @@
       </div>
     </section>
 
+    <section class="diff-page" id="diffPage" hidden>
+      <div class="diff-intro">
+        <div><span class="step">JSON DIFF</span><strong>对比两个 JSON 的结构与数据差异</strong></div>
+        <div class="sub-actions">
+          <button class="text-button" id="diffSampleButton" type="button">载入示例</button>
+          <button class="text-button" id="swapDiffButton" type="button">交换左右</button>
+          <button class="text-button muted" id="clearDiffButton" type="button">清空</button>
+        </div>
+      </div>
+      <div class="diff-input-grid">
+        <div class="panel diff-input-panel">
+          <div class="panel-head"><div><span class="step">A</span><strong>原始 JSON</strong></div><span class="side-label before-label">BEFORE</span></div>
+          <textarea class="diff-textarea" id="diffLeftInput" spellcheck="false" autocomplete="off" aria-label="原始 JSON" placeholder="粘贴第一个 JSON…"></textarea>
+          <div class="panel-foot"><span id="diffLeftStats">0 字符 · 等待输入</span></div>
+        </div>
+        <div class="panel diff-input-panel">
+          <div class="panel-head"><div><span class="step">B</span><strong>目标 JSON</strong></div><span class="side-label after-label">AFTER</span></div>
+          <textarea class="diff-textarea" id="diffRightInput" spellcheck="false" autocomplete="off" aria-label="目标 JSON" placeholder="粘贴第二个 JSON…"></textarea>
+          <div class="panel-foot"><span id="diffRightStats">0 字符 · 等待输入</span></div>
+        </div>
+      </div>
+      <div class="panel diff-result-panel">
+        <div class="panel-head">
+          <div><span class="step">Δ</span><strong>差异结果</strong></div>
+          <div class="diff-summary" id="diffSummary" hidden>
+            <span class="summary-added">+0 新增</span><span class="summary-removed">−0 删除</span><span class="summary-changed">0 修改</span>
+          </div>
+        </div>
+        <div class="diff-result" id="diffResult">
+          <div class="empty-state" id="diffEmptyState">
+            <div class="empty-icon">A<span>≠</span>B</div>
+            <strong>等待两个 JSON</strong>
+            <p>在上方分别粘贴 JSON，<br>这里会自动按字段路径展示差异。</p>
+          </div>
+        </div>
+        <div class="panel-foot"><span id="diffStatus">所有数据仅在当前浏览器中对比</span><button class="primary-button compact" id="compareButton" type="button">立即对比</button></div>
+      </div>
+    </section>
+
     <footer><span>JSON Lens</span><p>你的数据从未离开此浏览器。</p><span>NO DATA UPLOADED</span></footer>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20260715-2"></script>
+  <script src="app.js?v=20260715-4"></script>
 </body>
 </html>

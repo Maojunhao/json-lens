@@ -10,6 +10,7 @@ let currentView = 'tree';
 let autoFormatTimer = null;
 
 const sample = {project:'JSON Lens',version:1,features:['格式化','树形查看','搜索','压缩'],settings:{theme:'system',localOnly:true,indent:2},contributors:[{name:'Developer',active:true}],lastUpdated:null};
+const diffSamples={left:{project:'JSON Lens',version:1,settings:{theme:'light',indent:2},features:['format','tree'],deprecated:true},right:{project:'JSON Lens',version:2,settings:{theme:'dark',indent:2,autoSave:true},features:['format','tree','diff'],releasedAt:'2026-07-15'}};
 
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 function valueClass(value){if(value===null)return'null';if(typeof value==='string')return'string';if(typeof value==='number')return'number';if(typeof value==='boolean')return'boolean';return'';}
@@ -50,8 +51,78 @@ function formatJson(notify=true){
     errorView.innerHTML=`<strong>无法解析这段 JSON</strong>${escapeHtml(error.message)}${detail?`<br>${detail}`:''}<br><br>请检查引号、逗号和括号是否完整。`;$('#outputStats').textContent='JSON 无效';
   }
 }
-function switchView(view){currentView=view;document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(!parsedData)return;treeView.hidden=view!=='tree';codeView.hidden=view!=='code';$('#expandButton').hidden=view!=='tree';$('#collapseButton').hidden=view!=='tree';}
+function switchView(view){currentView=view;document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(!formattedText)return;treeView.hidden=view!=='tree';codeView.hidden=view!=='code';$('#expandButton').hidden=view!=='tree';$('#collapseButton').hidden=view!=='tree';}
 function readFile(file){if(!file)return;if(file.size>5*1024*1024){toast('文件请勿超过 5 MB');return}const reader=new FileReader();reader.onload=()=>{input.value=reader.result;updateInputStats();formatJson()};reader.readAsText(file);}
+
+const diffLeft=$('#diffLeftInput');
+const diffRight=$('#diffRightInput');
+const diffResult=$('#diffResult');
+let diffTimer=null;
+
+function jsonKind(value){return value===null?'null':Array.isArray(value)?'array':typeof value;}
+function childPath(path,key,isArray=false){if(isArray)return`${path}[${key}]`;return /^[A-Za-z_$][\w$]*$/.test(key)?`${path}.${key}`:`${path}[${JSON.stringify(key)}]`;}
+function compareValues(before,after,path='$',changes=[]){
+  if(Object.is(before,after))return changes;
+  const beforeKind=jsonKind(before),afterKind=jsonKind(after);
+  if(beforeKind!==afterKind){changes.push({type:'changed',path,before,after});return changes}
+  if(beforeKind==='array'){
+    const length=Math.max(before.length,after.length);
+    for(let i=0;i<length;i++){
+      const itemPath=childPath(path,i,true);
+      if(i>=before.length)changes.push({type:'added',path:itemPath,after:after[i]});
+      else if(i>=after.length)changes.push({type:'removed',path:itemPath,before:before[i]});
+      else compareValues(before[i],after[i],itemPath,changes);
+    }
+    return changes;
+  }
+  if(beforeKind==='object'){
+    const keys=new Set([...Object.keys(before),...Object.keys(after)]);
+    keys.forEach(key=>{
+      const itemPath=childPath(path,key);
+      if(!Object.prototype.hasOwnProperty.call(before,key))changes.push({type:'added',path:itemPath,after:after[key]});
+      else if(!Object.prototype.hasOwnProperty.call(after,key))changes.push({type:'removed',path:itemPath,before:before[key]});
+      else compareValues(before[key],after[key],itemPath,changes);
+    });
+    return changes;
+  }
+  changes.push({type:'changed',path,before,after});
+  return changes;
+}
+function diffValue(value){const text=JSON.stringify(value,null,2);return escapeHtml(text===undefined?String(value):text)}
+function parseDiffInput(element,statusElement,label){
+  const raw=element.value.trim();
+  if(!raw){statusElement.className='';statusElement.textContent=`0 字符 · 等待输入`;return{ok:false,empty:true}}
+  try{const value=JSON.parse(raw);statusElement.className='valid';statusElement.textContent=`${element.value.length.toLocaleString()} 字符 · JSON 有效`;return{ok:true,value}}
+  catch(error){statusElement.className='invalid';statusElement.textContent=`${element.value.length.toLocaleString()} 字符 · JSON ${label} 无效`;return{ok:false,error}}
+}
+function updateDiffSummary(changes){
+  const summary=$('#diffSummary');summary.hidden=false;
+  const counts={added:0,removed:0,changed:0};changes.forEach(item=>counts[item.type]++);
+  summary.querySelector('.summary-added').textContent=`+${counts.added} 新增`;
+  summary.querySelector('.summary-removed').textContent=`−${counts.removed} 删除`;
+  summary.querySelector('.summary-changed').textContent=`${counts.changed} 修改`;
+  return counts;
+}
+function renderDiff(changes){
+  const counts=updateDiffSummary(changes);
+  if(!changes.length){diffResult.innerHTML='<div class="diff-equal"><div class="diff-equal-icon">✓</div><strong>两个 JSON 完全一致</strong><p>没有发现结构或数值差异。</p></div>';$('#diffStatus').textContent='0 个差异 · 内容完全一致';return}
+  const labels={added:'新增',removed:'删除',changed:'修改'};
+  diffResult.innerHTML=`<div class="diff-list">${changes.map(item=>`<article class="diff-item ${item.type}"><div class="diff-item-head"><span class="diff-badge">${labels[item.type]}</span><code class="diff-path">${escapeHtml(item.path)}</code></div><div class="diff-values"><div class="diff-value"><small>原始值 / BEFORE</small>${item.type==='added'?'<pre class="diff-missing">此字段不存在</pre>':`<pre>${diffValue(item.before)}</pre>`}</div><div class="diff-value"><small>目标值 / AFTER</small>${item.type==='removed'?'<pre class="diff-missing">此字段不存在</pre>':`<pre>${diffValue(item.after)}</pre>`}</div></div></article>`).join('')}</div>`;
+  $('#diffStatus').textContent=`共 ${changes.length} 个差异 · ${counts.added} 新增 / ${counts.removed} 删除 / ${counts.changed} 修改`;
+}
+function runDiff(notify=false){
+  const left=parseDiffInput(diffLeft,$('#diffLeftStats'),'A');
+  const right=parseDiffInput(diffRight,$('#diffRightStats'),'B');
+  if(left.empty||right.empty){$('#diffSummary').hidden=true;diffResult.innerHTML='<div class="empty-state"><div class="empty-icon">A<span>≠</span>B</div><strong>等待两个 JSON</strong><p>在上方分别粘贴 JSON，<br>这里会自动按字段路径展示差异。</p></div>';$('#diffStatus').textContent='请在左右两侧都输入 JSON';return}
+  if(!left.ok||!right.ok){$('#diffSummary').hidden=true;diffResult.innerHTML='<div class="diff-error"><strong>暂时无法对比</strong><br>请先修正标记为无效的 JSON，系统随后会自动重新对比。</div>';$('#diffStatus').textContent='JSON 格式有误';return}
+  const changes=compareValues(left.value,right.value);renderDiff(changes);if(notify)toast(`对比完成：发现 ${changes.length} 个差异`);
+}
+function scheduleDiff(){clearTimeout(diffTimer);diffTimer=setTimeout(()=>runDiff(false),350)}
+function switchMode(mode){
+  const isDiff=mode==='diff';$('#dropZone').hidden=isDiff;$('#diffPage').hidden=!isDiff;
+  document.querySelectorAll('.mode-tab').forEach(button=>button.classList.toggle('active',button.dataset.mode===mode));
+  document.title=isDiff?'JSON Lens · JSON 差异对比':'JSON Lens · JSON 格式化工具';
+}
 
 input.addEventListener('input',()=>{updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',()=>{$('#lineNumbers').scrollTop=input.scrollTop});
 $('#formatButton').addEventListener('click',formatJson);$('#sampleButton').addEventListener('click',()=>{input.value=JSON.stringify(sample);updateInputStats();formatJson()});
@@ -65,7 +136,13 @@ $('#copyButton').addEventListener('click',async()=>{await navigator.clipboard.wr
 $('#minifyButton').addEventListener('click',()=>{formattedText=JSON.stringify(parsedData);codeView.querySelector('code').textContent=formattedText;toast('已压缩 JSON')});
 $('#downloadButton').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([formattedText],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='formatted.json';a.click();URL.revokeObjectURL(url);toast('下载已开始')});
 $('#themeButton').addEventListener('click',()=>{document.body.classList.toggle('dark');localStorage.setItem('json-lens-theme',document.body.classList.contains('dark')?'dark':'light')});
-document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();formatJson()}});
+document.querySelectorAll('.mode-tab').forEach(button=>button.addEventListener('click',()=>switchMode(button.dataset.mode)));
+diffLeft.addEventListener('input',scheduleDiff);diffRight.addEventListener('input',scheduleDiff);
+$('#compareButton').addEventListener('click',()=>runDiff(true));
+$('#diffSampleButton').addEventListener('click',()=>{diffLeft.value=JSON.stringify(diffSamples.left,null,2);diffRight.value=JSON.stringify(diffSamples.right,null,2);runDiff(true)});
+$('#swapDiffButton').addEventListener('click',()=>{const value=diffLeft.value;diffLeft.value=diffRight.value;diffRight.value=value;runDiff()});
+$('#clearDiffButton').addEventListener('click',()=>{diffLeft.value='';diffRight.value='';clearTimeout(diffTimer);runDiff();diffLeft.focus()});
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();$('#diffPage').hidden?formatJson():runDiff(true)}});
 const zone=$('#dropZone');['dragenter','dragover'].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();zone.classList.add('dragging')}));['dragleave','drop'].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();zone.classList.remove('dragging')}));zone.addEventListener('drop',e=>readFile(e.dataTransfer.files[0]));
 if(localStorage.getItem('json-lens-theme')==='dark'||(!localStorage.getItem('json-lens-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 updateInputStats();
