@@ -7,6 +7,7 @@ const emptyState = $('#emptyState');
 let parsedData = null;
 let formattedText = '';
 let currentView = 'tree';
+let autoFormatTimer = null;
 
 const sample = {project:'JSON Lens',version:1,features:['格式化','树形查看','搜索','压缩'],settings:{theme:'system',localOnly:true,indent:2},contributors:[{name:'Developer',active:true}],lastUpdated:null};
 
@@ -29,15 +30,20 @@ function updateInputStats(){const lines=input.value.split('\n').length;$('#input
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(el.timer);el.timer=setTimeout(()=>el.classList.remove('show'),1800);}
 function setActions(enabled){['#copyButton','#downloadButton','#minifyButton'].forEach(id=>$(id).disabled=!enabled)}
 
-function formatJson(){
-  if(!input.value.trim()){toast('请先输入 JSON');input.focus();return}
+function resetResult(focusInput=false){
+  parsedData=null;formattedText='';treeView.hidden=true;codeView.hidden=true;errorView.hidden=true;emptyState.hidden=false;setActions(false);$('#outputStats').textContent='尚未解析';
+  if(focusInput)input.focus();
+}
+
+function formatJson(notify=true){
+  if(!input.value.trim()){if(notify){toast('请先输入 JSON');input.focus()}return}
   try{
-    parsedData=JSON.parse(input.value);formattedText=JSON.stringify(parsedData,null,2);input.value=formattedText;updateInputStats();
+    parsedData=JSON.parse(input.value);formattedText=JSON.stringify(parsedData,null,2);
     treeView.replaceChildren(makeNode('root',parsedData,true));codeView.querySelector('code').textContent=formattedText;
     emptyState.hidden=true;errorView.hidden=true;setActions(true);switchView(currentView);
     const type=Array.isArray(parsedData)?'数组':parsedData!==null&&typeof parsedData==='object'?'对象':typeof parsedData;
     const count=parsedData!==null&&typeof parsedData==='object'?Object.keys(parsedData).length:1;
-    $('#outputStats').textContent=`有效 JSON · ${type} · ${count} 个顶层项`;toast('格式化完成');
+    $('#outputStats').textContent=`有效 JSON · ${type} · ${count} 个顶层项`;if(notify)toast('格式化完成');
   }catch(error){
     parsedData=null;formattedText='';setActions(false);emptyState.hidden=true;treeView.hidden=true;codeView.hidden=true;errorView.hidden=false;
     const match=error.message.match(/position (\d+)/);let detail='';if(match){const pos=Number(match[1]);const before=input.value.slice(0,pos);detail=`第 ${before.split('\n').length} 行，第 ${pos-before.lastIndexOf('\n')} 列`}
@@ -47,16 +53,16 @@ function formatJson(){
 function switchView(view){currentView=view;document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(!parsedData)return;treeView.hidden=view!=='tree';codeView.hidden=view!=='code';$('#expandButton').hidden=view!=='tree';$('#collapseButton').hidden=view!=='tree';}
 function readFile(file){if(!file)return;if(file.size>5*1024*1024){toast('文件请勿超过 5 MB');return}const reader=new FileReader();reader.onload=()=>{input.value=reader.result;updateInputStats();formatJson()};reader.readAsText(file);}
 
-input.addEventListener('input',updateInputStats);input.addEventListener('scroll',()=>{$('#lineNumbers').scrollTop=input.scrollTop});
+input.addEventListener('input',()=>{updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',()=>{$('#lineNumbers').scrollTop=input.scrollTop});
 $('#formatButton').addEventListener('click',formatJson);$('#sampleButton').addEventListener('click',()=>{input.value=JSON.stringify(sample);updateInputStats();formatJson()});
-$('#clearButton').addEventListener('click',()=>{input.value='';parsedData=null;formattedText='';treeView.hidden=true;codeView.hidden=true;errorView.hidden=true;emptyState.hidden=false;setActions(false);$('#outputStats').textContent='尚未解析';updateInputStats();input.focus()});
+$('#clearButton').addEventListener('click',()=>{input.value='';clearTimeout(autoFormatTimer);resetResult(true);updateInputStats()});
 $('#fileInput').addEventListener('change',e=>readFile(e.target.files[0]));
 document.querySelectorAll('.view-tab').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
 $('#expandButton').addEventListener('click',()=>{document.querySelectorAll('.children').forEach(n=>n.classList.remove('collapsed'));document.querySelectorAll('.toggle:not(.placeholder)').forEach(n=>n.textContent='▾')});
 $('#collapseButton').addEventListener('click',()=>{document.querySelectorAll('.children').forEach(n=>n.classList.add('collapsed'));document.querySelectorAll('.toggle:not(.placeholder)').forEach(n=>n.textContent='▸')});
 $('#searchInput').addEventListener('input',e=>{const q=e.target.value.trim().toLowerCase();document.querySelectorAll('.tree-row').forEach(row=>row.classList.toggle('match',!!q&&row.textContent.toLowerCase().includes(q)))});
 $('#copyButton').addEventListener('click',async()=>{await navigator.clipboard.writeText(formattedText);toast('已复制到剪贴板')});
-$('#minifyButton').addEventListener('click',()=>{formattedText=JSON.stringify(parsedData);input.value=formattedText;codeView.querySelector('code').textContent=formattedText;updateInputStats();toast('已压缩 JSON')});
+$('#minifyButton').addEventListener('click',()=>{formattedText=JSON.stringify(parsedData);codeView.querySelector('code').textContent=formattedText;toast('已压缩 JSON')});
 $('#downloadButton').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([formattedText],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='formatted.json';a.click();URL.revokeObjectURL(url);toast('下载已开始')});
 $('#themeButton').addEventListener('click',()=>{document.body.classList.toggle('dark');localStorage.setItem('json-lens-theme',document.body.classList.contains('dark')?'dark':'light')});
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();formatJson()}});
