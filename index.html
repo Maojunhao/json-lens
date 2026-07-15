@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="一个安全、快速、完全在浏览器本地运行的 JSON 格式化与可视化工具。">
+  <meta name="color-scheme" content="dark light">
+  <title>JSON Lens · JSON 格式化工具</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <main class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="JSON Lens 首页">
+        <span class="brand-mark">{ }</span>
+        <span><b>JSON Lens</b><small>本地 · 快速 · 安全</small></span>
+      </a>
+      <div class="header-actions">
+        <span class="privacy"><i></i> 数据仅在本地处理</span>
+        <button class="icon-button" id="themeButton" type="button" title="切换主题" aria-label="切换主题">☼</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">DEVELOPER TOOL / 001</p>
+      <h1>让复杂的 JSON<br><em>一眼就懂。</em></h1>
+      <p>粘贴、拖入或上传 JSON，立即格式化并探索数据结构。无需登录，不会上传任何数据。</p>
+    </section>
+
+    <section class="workspace" id="dropZone">
+      <div class="panel input-panel">
+        <div class="panel-head">
+          <div><span class="step">01</span><strong>原始数据</strong></div>
+          <div class="sub-actions">
+            <label class="text-button" for="fileInput">上传文件</label>
+            <input id="fileInput" type="file" accept=".json,application/json" hidden>
+            <button class="text-button" id="sampleButton" type="button">载入示例</button>
+            <button class="text-button muted" id="clearButton" type="button">清空</button>
+          </div>
+        </div>
+        <div class="editor-wrap">
+          <div class="line-numbers" id="lineNumbers" aria-hidden="true">1</div>
+          <textarea id="jsonInput" spellcheck="false" autocomplete="off" aria-label="输入 JSON" placeholder="在这里粘贴 JSON…"></textarea>
+          <div class="drop-hint"><span>↓</span> 松开即可读取 JSON 文件</div>
+        </div>
+        <div class="panel-foot">
+          <span id="inputStats">0 字符 · 1 行</span>
+          <button class="primary-button" id="formatButton" type="button">格式化 JSON <kbd>⌘ ↵</kbd></button>
+        </div>
+      </div>
+
+      <div class="panel output-panel">
+        <div class="panel-head output-head">
+          <div><span class="step">02</span><strong>可视化结果</strong></div>
+          <div class="view-tabs" role="tablist">
+            <button class="view-tab active" data-view="tree" type="button">树形</button>
+            <button class="view-tab" data-view="code" type="button">代码</button>
+          </div>
+        </div>
+        <div class="output-toolbar">
+          <label class="search-box">⌕<input id="searchInput" type="search" placeholder="搜索键或值…" aria-label="搜索键或值"></label>
+          <div>
+            <button class="tool-button" id="expandButton" type="button">全部展开</button>
+            <button class="tool-button" id="collapseButton" type="button">全部收起</button>
+          </div>
+        </div>
+        <div class="result-area" id="resultArea">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">{<span>…</span>}</div>
+            <strong>等待你的数据</strong>
+            <p>输入 JSON 后点击“格式化”，<br>这里会生成可探索的数据树。</p>
+          </div>
+          <div id="treeView" class="tree-view" hidden></div>
+          <pre id="codeView" class="code-view" hidden><code></code></pre>
+          <div id="errorView" class="error-view" hidden></div>
+        </div>
+        <div class="panel-foot output-foot">
+          <span id="outputStats">尚未解析</span>
+          <div>
+            <button class="secondary-button" id="minifyButton" type="button" disabled>压缩</button>
+            <button class="secondary-button" id="downloadButton" type="button" disabled>下载</button>
+            <button class="primary-button compact" id="copyButton" type="button" disabled>复制结果</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer><span>JSON Lens</span><p>你的数据从未离开此浏览器。</p><span>NO DATA UPLOADED</span></footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
