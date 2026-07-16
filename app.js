@@ -1,5 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 const input = $('#jsonInput');
+const inputHighlight = $('#inputHighlight');
 const treeView = $('#treeView');
 const codeView = $('#codeView');
 const errorView = $('#errorView');
@@ -16,6 +17,55 @@ function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&am
 function valueClass(value){if(value===null)return'null';if(typeof value==='string')return'string';if(typeof value==='number')return'number';if(typeof value==='boolean')return'boolean';return'';}
 function displayValue(value){if(value===null)return'null';return typeof value==='string'?`"${escapeHtml(value)}"`:escapeHtml(value);}
 
+function bracketPairs(text){
+  const pairs=new Map();const stack=[];let quoted=false;let escaped=false;
+  for(let i=0;i<text.length;i++){
+    const char=text[i];
+    if(quoted){if(escaped)escaped=false;else if(char==='\\')escaped=true;else if(char==='"')quoted=false;continue}
+    if(char==='"'){quoted=true;continue}
+    if(char==='{'||char==='['){stack.push({char,index:i});continue}
+    if(char==='}'||char===']'){
+      const opening=char==='}'?'{':'[';const top=stack.at(-1);
+      if(top?.char===opening){stack.pop();pairs.set(top.index,i);pairs.set(i,top.index)}
+    }
+  }
+  return pairs;
+}
+let bracketCacheText=null;let bracketCache=new Map();let bracketLineStarts=[0];let renderedBracketText=null;let renderedBracketKey=null;
+function ensureBracketCache(text){
+  if(bracketCacheText===text)return;
+  bracketCacheText=text;bracketCache=bracketPairs(text);bracketLineStarts=[0];
+  for(let i=0;i<text.length;i++)if(text[i]==='\n')bracketLineStarts.push(i+1);
+  renderedBracketText=null;renderedBracketKey=null;
+}
+function adjacentBracketIndex(text,position){
+  const brackets='{}[]';
+  if(position>0&&brackets.includes(text[position-1]))return position-1;
+  if(position<text.length&&brackets.includes(text[position]))return position;
+  return -1;
+}
+function renderInputHighlight(position=input.selectionStart){
+  const text=input.value;ensureBracketCache(text);const index=adjacentBracketIndex(text,position);const match=bracketCache.get(index);
+  const key=index<0||match===undefined?'':`${Math.min(index,match)}:${Math.max(index,match)}`;
+  if(renderedBracketText===text&&renderedBracketKey===key)return;
+  renderedBracketText=text;renderedBracketKey=key;
+  if(!key){inputHighlight.textContent=text;return}
+  const marked=new Set([index,match]);let html='';
+  for(let i=0;i<text.length;i++)html+=marked.has(i)?`<strong class="matched-bracket">${escapeHtml(text[i])}</strong>`:escapeHtml(text[i]);
+  inputHighlight.innerHTML=html;
+}
+function hoveredInputPosition(event){
+  const style=getComputedStyle(input);const rect=input.getBoundingClientRect();
+  const canvas=hoveredInputPosition.canvas||(hoveredInputPosition.canvas=document.createElement('canvas'));
+  const context=canvas.getContext('2d');context.font=style.font;
+  const charWidth=context.measureText('M').width;const lineHeight=parseFloat(style.lineHeight);
+  const column=Math.max(0,Math.floor((event.clientX-rect.left-parseFloat(style.paddingLeft)+input.scrollLeft)/charWidth));
+  const row=Math.max(0,Math.floor((event.clientY-rect.top-parseFloat(style.paddingTop)+input.scrollTop)/lineHeight));
+  ensureBracketCache(input.value);if(row>=bracketLineStarts.length)return input.selectionStart;
+  const start=bracketLineStarts[row];const end=row+1<bracketLineStarts.length?bracketLineStarts[row+1]-1:input.value.length;
+  return start+Math.min(column,end-start);
+}
+
 function makeNode(key,value,isRoot=false){
   const wrapper=document.createElement('div'); wrapper.className=isRoot?'tree-root':'tree-node';
   const row=document.createElement('div'); row.className='tree-row';
@@ -27,7 +77,7 @@ function makeNode(key,value,isRoot=false){
   return wrapper;
 }
 
-function updateInputStats(){const lines=input.value.split('\n').length;$('#inputStats').textContent=`${input.value.length.toLocaleString()} 字符 · ${lines} 行`;$('#lineNumbers').textContent=Array.from({length:lines},(_,i)=>i+1).join('\n');}
+function updateInputStats(){const lines=input.value.split('\n').length;$('#inputStats').textContent=`${input.value.length.toLocaleString()} 字符 · ${lines} 行`;$('#lineNumbers').textContent=Array.from({length:lines},(_,i)=>i+1).join('\n');renderInputHighlight();}
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(el.timer);el.timer=setTimeout(()=>el.classList.remove('show'),1800);}
 function setActions(enabled){['#copyButton','#downloadButton','#minifyButton'].forEach(id=>$(id).disabled=!enabled)}
 
@@ -165,7 +215,10 @@ function switchMode(mode){
   document.title=isDiff?'JSON Lens · JSON 差异对比':'JSON Lens · JSON 格式化工具';
 }
 
-input.addEventListener('input',()=>{updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',()=>{$('#lineNumbers').scrollTop=input.scrollTop});
+input.addEventListener('input',()=>{updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',()=>{$('#lineNumbers').scrollTop=input.scrollTop;inputHighlight.scrollTop=input.scrollTop;inputHighlight.scrollLeft=input.scrollLeft});
+['click','keyup','select'].forEach(eventName=>input.addEventListener(eventName,()=>renderInputHighlight()));
+input.addEventListener('mousemove',event=>renderInputHighlight(hoveredInputPosition(event)));
+input.addEventListener('mouseleave',()=>renderInputHighlight());
 $('#formatButton').addEventListener('click',formatJson);$('#sampleButton').addEventListener('click',()=>{input.value=JSON.stringify(sample);updateInputStats();formatJson()});
 $('#clearButton').addEventListener('click',()=>{input.value='';clearTimeout(autoFormatTimer);resetResult(true);updateInputStats()});
 $('#fileInput').addEventListener('change',e=>readFile(e.target.files[0]));

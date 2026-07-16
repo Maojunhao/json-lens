@@ -15,4 +15,49 @@ body.dark{--bg:#171916;--panel:rgba(34,36,32,.86);--ink:#edeee8;--muted:#989b92;
 .diff-editor-shell{position:relative;height:clamp(440px,calc(100vh - 280px),900px);min-height:440px;border-bottom:1px solid var(--line);overflow:hidden}.diff-highlight,.diff-editor-shell .diff-textarea{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:20px;border:0;white-space:pre;overflow:auto;font:650 14px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;tab-size:2}.diff-highlight{z-index:1;pointer-events:none;color:var(--ink);background:rgba(250,250,247,.48)}.diff-editor-shell .diff-textarea{z-index:2;resize:none;background:transparent;color:transparent;caret-color:var(--ink);outline:0}.diff-editor-shell .diff-textarea::selection{background:rgba(66,112,208,.2);color:transparent}.diff-editor-shell .diff-textarea::placeholder{color:#aaa}.json-code-line{display:block;min-width:100%;min-height:1.65em;padding:0 6px;margin:0 -6px;border-left:3px solid transparent}.json-code-line.diff-changed{color:#c85e12;background:rgba(240,122,36,.14);border-left-color:#f07a24}.json-code-line.diff-added{background:rgba(39,129,92,.13);border-left-color:#3a9a70}.json-code-line.diff-removed{background:rgba(208,68,48,.12);border-left-color:#d45c49}.json-key{color:#ad3f2a}.json-string{color:#247957}.json-number{color:#2c5fc0}.json-boolean,.json-null{color:#8344aa}.diff-item.changed{border-left-color:#f07a24}.changed .diff-badge{color:#c85e12;background:rgba(240,122,36,.14)}.summary-changed{color:#c85e12;background:rgba(240,122,36,.14)}.diff-path{font-size:13px;font-weight:800}.diff-value small{font-size:10px;font-weight:750}.diff-value pre{font-size:12px;font-weight:650}.diff-item-head{font-weight:700}
 body.dark .diff-highlight{background:rgba(12,14,11,.18)}body.dark .json-code-line.diff-changed{color:#ff9b59;background:rgba(240,122,36,.18)}
 @media(max-width:900px){.diff-editor-shell{height:clamp(420px,calc(100vh - 230px),720px);min-height:420px}}
+
+/* Keep logical JSON lines and gutter numbers on the same vertical rhythm. */
+.line-numbers,
+#jsonInput {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.input-highlight,
+#jsonInput {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 20px;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+}
+.input-highlight {
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  color: var(--ink);
+  background: transparent;
+  font: 13px/21px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+#jsonInput {
+  z-index: 2;
+  color: transparent;
+  caret-color: var(--ink);
+}
+#jsonInput::selection {
+  color: transparent;
+  background: rgba(66,112,208,.2);
+}
+.matched-bracket {
+  color: #ef3f2f;
+  font-weight: 900;
+  background: rgba(239,63,47,.14);
+  border-radius: 2px;
+}
+.drop-hint { z-index: 4; }
 .diff-highlight{overflow:hidden}
