@@ -211,9 +211,9 @@ function runDiff(notify=false){
 }
 function scheduleDiff(){clearTimeout(diffTimer);diffTimer=setTimeout(()=>runDiff(false),350)}
 function switchMode(mode){
-  $('#dropZone').hidden=mode!=='formatter';$('#diffPage').hidden=mode!=='diff';$('#jsonstrPage').hidden=mode!=='jsonstr';
+  $('#dropZone').hidden=mode!=='formatter';$('#diffPage').hidden=mode!=='diff';$('#jsonstrPage').hidden=mode!=='jsonstr';$('#colorPage').hidden=mode!=='color';
   document.querySelectorAll('.mode-tab').forEach(button=>button.classList.toggle('active',button.dataset.mode===mode));
-  const titles={formatter:'JSON Lens · JSON 格式化工具',diff:'JSON Lens · JSON 差异对比',jsonstr:'JSON Lens · JSONStr 双向转换'};document.title=titles[mode];
+  const titles={formatter:'JSON Lens · JSON 格式化工具',diff:'JSON Lens · JSON 差异对比',jsonstr:'JSON Lens · JSONStr 双向转换',color:'JSON Lens · RGBA HEX 颜色解析'};document.title=titles[mode];
 }
 
 const jsonstrJsonInput=$('#jsonstrJsonInput');
@@ -255,6 +255,37 @@ function jsonstrToJson(notify=false){
 }
 function scheduleJsonstr(source){jsonstrSource=source;clearTimeout(jsonstrTimer);jsonstrTimer=setTimeout(()=>source==='json'?jsonToJsonstr():jsonstrToJson(),250)}
 
+const hexColorInput=$('#hexColorInput');const rgbaColorInput=$('#rgbaColorInput');const colorSwatch=$('#colorSwatch');const colorStatus=$('#colorStatus');
+const colorChannels={r:$('#redChannel'),g:$('#greenChannel'),b:$('#blueChannel'),a:$('#alphaChannel')};
+let currentColor={r:255,g:79,b:45,a:1};
+function parseHexColor(raw){
+  let value=raw.trim().replace(/^#/,'');if(!/^[0-9a-f]+$/i.test(value)||![3,4,6,8].includes(value.length))throw new Error('HEX 格式无效');
+  if(value.length===3||value.length===4)value=[...value].map(char=>char+char).join('');
+  const hasAlpha=value.length===8;return{r:parseInt(value.slice(0,2),16),g:parseInt(value.slice(2,4),16),b:parseInt(value.slice(4,6),16),a:hasAlpha?parseInt(value.slice(6,8),16)/255:1};
+}
+function parseRgbChannel(value){const percent=value.endsWith('%');const number=parseFloat(value);if(!Number.isFinite(number))throw new Error('颜色通道无效');const result=percent?number*2.55:number;if(result<0||result>255)throw new Error('颜色通道超出范围');return Math.round(result)}
+function parseAlphaChannel(value){const percent=value.endsWith('%');const number=parseFloat(value);if(!Number.isFinite(number))throw new Error('透明度无效');const result=percent?number/100:number;if(result<0||result>1)throw new Error('透明度超出范围');return result}
+function parseRgbaColor(raw){
+  const match=raw.trim().match(/^rgba?\((.*)\)$/i);if(!match)throw new Error('RGBA 格式无效');
+  const parts=match[1].trim().replace(/\s*[,/]\s*/g,' ').split(/\s+/).filter(Boolean);if(parts.length<3||parts.length>4)throw new Error('RGBA 通道数量无效');
+  return{r:parseRgbChannel(parts[0]),g:parseRgbChannel(parts[1]),b:parseRgbChannel(parts[2]),a:parts[3]===undefined?1:parseAlphaChannel(parts[3])};
+}
+function hexByte(value){return Math.round(value).toString(16).padStart(2,'0').toUpperCase()}
+function colorToHex(color){const base=`#${hexByte(color.r)}${hexByte(color.g)}${hexByte(color.b)}`;return color.a>=.999?base:`${base}${hexByte(color.a*255)}`}
+function displayAlpha(value){return Number(value.toFixed(3)).toString()}
+function colorToRgba(color){return`rgba(${color.r}, ${color.g}, ${color.b}, ${displayAlpha(color.a)})`}
+function renderColor(color,source=''){
+  currentColor={r:color.r,g:color.g,b:color.b,a:Math.max(0,Math.min(1,color.a))};const hex=colorToHex(currentColor);const rgba=colorToRgba(currentColor);
+  if(source!=='hex')hexColorInput.value=hex;if(source!=='rgba')rgbaColorInput.value=rgba;
+  colorSwatch.style.background=rgba;$('#colorPreviewHex').textContent=hex;$('#colorPreviewRgba').textContent=rgba;$('#nativeColorPicker').value=`#${hexByte(currentColor.r)}${hexByte(currentColor.g)}${hexByte(currentColor.b)}`.toLowerCase();
+  colorChannels.r.value=currentColor.r;colorChannels.g.value=currentColor.g;colorChannels.b.value=currentColor.b;colorChannels.a.value=Math.round(currentColor.a*100);
+  $('#redValue').textContent=currentColor.r;$('#greenValue').textContent=currentColor.g;$('#blueValue').textContent=currentColor.b;$('#alphaValue').textContent=`${Math.round(currentColor.a*100)}%`;
+  colorStatus.className='valid';colorStatus.textContent=`颜色有效 · ${currentColor.a>=.999?'不透明':`${Math.round(currentColor.a*100)}% 透明度`}`;
+}
+function invalidColor(message){colorStatus.className='invalid';colorStatus.textContent=message}
+function readColorChannels(){return{r:Number(colorChannels.r.value),g:Number(colorChannels.g.value),b:Number(colorChannels.b.value),a:Number(colorChannels.a.value)/100}}
+function randomColor(){renderColor({r:Math.floor(Math.random()*256),g:Math.floor(Math.random()*256),b:Math.floor(Math.random()*256),a:Number((.35+Math.random()*.65).toFixed(2))});toast('已生成随机颜色')}
+
 input.addEventListener('input',()=>{updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',()=>{$('#lineNumbers').scrollTop=input.scrollTop;inputHighlight.scrollTop=input.scrollTop;inputHighlight.scrollLeft=input.scrollLeft});
 ['click','keyup','select'].forEach(eventName=>input.addEventListener(eventName,()=>renderInputHighlight()));
 input.addEventListener('mousemove',event=>renderInputHighlight(hoveredInputPosition(event)));
@@ -277,13 +308,22 @@ $('#jsonstrSampleButton').addEventListener('click',()=>{jsonstrJsonInput.value=J
 $('#clearJsonstrButton').addEventListener('click',()=>{resetJsonstr();jsonstrJsonInput.focus()});
 $('#copyJsonButton').addEventListener('click',async()=>{await navigator.clipboard.writeText(jsonstrJsonInput.value);toast('JSON 已复制')});
 $('#copyJsonstrButton').addEventListener('click',async()=>{await navigator.clipboard.writeText(jsonstrStringInput.value);toast('JSONStr 已复制')});
+hexColorInput.addEventListener('input',()=>{try{renderColor(parseHexColor(hexColorInput.value),'hex')}catch(error){invalidColor(error.message)}});
+rgbaColorInput.addEventListener('input',()=>{try{renderColor(parseRgbaColor(rgbaColorInput.value),'rgba')}catch(error){invalidColor(error.message)}});
+hexColorInput.addEventListener('blur',()=>renderColor(currentColor));rgbaColorInput.addEventListener('blur',()=>renderColor(currentColor));
+Object.values(colorChannels).forEach(channel=>channel.addEventListener('input',()=>renderColor(readColorChannels())));
+$('#nativeColorPicker').addEventListener('input',event=>{const picked=parseHexColor(event.target.value);renderColor({...picked,a:currentColor.a})});
+$('#copyHexButton').addEventListener('click',async()=>{await navigator.clipboard.writeText(colorToHex(currentColor));toast('HEX 已复制')});
+$('#copyRgbaButton').addEventListener('click',async()=>{await navigator.clipboard.writeText(colorToRgba(currentColor));toast('RGBA 已复制')});
+$('#colorSampleButton').addEventListener('click',()=>{renderColor({r:255,g:79,b:45,a:.72});toast('已载入示例颜色')});
+$('#randomColorButton').addEventListener('click',randomColor);
 diffLeft.addEventListener('input',()=>{renderRawEditor(diffLeft,diffLeftHighlight);scheduleDiff()});diffRight.addEventListener('input',()=>{renderRawEditor(diffRight,diffRightHighlight);scheduleDiff()});
 diffLeft.addEventListener('scroll',()=>{diffLeftHighlight.scrollTop=diffLeft.scrollTop;diffLeftHighlight.scrollLeft=diffLeft.scrollLeft});diffRight.addEventListener('scroll',()=>{diffRightHighlight.scrollTop=diffRight.scrollTop;diffRightHighlight.scrollLeft=diffRight.scrollLeft});
 $('#compareButton').addEventListener('click',()=>runDiff(true));
 $('#diffSampleButton').addEventListener('click',()=>{diffLeft.value=JSON.stringify(diffSamples.left,null,2);diffRight.value=JSON.stringify(diffSamples.right,null,2);runDiff(true)});
 $('#swapDiffButton').addEventListener('click',()=>{const value=diffLeft.value;diffLeft.value=diffRight.value;diffRight.value=value;runDiff()});
 $('#clearDiffButton').addEventListener('click',()=>{diffLeft.value='';diffRight.value='';clearTimeout(diffTimer);runDiff();diffLeft.focus()});
-document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();const mode=document.querySelector('.mode-tab.active').dataset.mode;if(mode==='formatter')formatJson();else if(mode==='diff')runDiff(true);else jsonstrSource==='json'?jsonToJsonstr(true):jsonstrToJson(true)}});
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();const mode=document.querySelector('.mode-tab.active').dataset.mode;if(mode==='formatter')formatJson();else if(mode==='diff')runDiff(true);else if(mode==='jsonstr')jsonstrSource==='json'?jsonToJsonstr(true):jsonstrToJson(true)}});
 const zone=$('#dropZone');['dragenter','dragover'].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();zone.classList.add('dragging')}));['dragleave','drop'].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();zone.classList.remove('dragging')}));zone.addEventListener('drop',e=>readFile(e.dataTransfer.files[0]));
 if(localStorage.getItem('json-lens-theme')==='dark'||(!localStorage.getItem('json-lens-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
-updateInputStats();renderRawEditor(diffLeft,diffLeftHighlight);renderRawEditor(diffRight,diffRightHighlight);
+updateInputStats();renderRawEditor(diffLeft,diffLeftHighlight);renderRawEditor(diffRight,diffRightHighlight);renderColor(currentColor);

@@ -6,7 +6,7 @@
   <meta name="description" content="一个安全、快速、完全在浏览器本地运行的 JSON 格式化与可视化工具。">
   <meta name="color-scheme" content="dark light">
   <title>JSON Lens · JSON 格式化工具</title>
-  <link rel="stylesheet" href="styles.css?v=20260717-1">
+  <link rel="stylesheet" href="styles.css?v=20260717-2">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -22,6 +22,7 @@
           <button class="mode-tab active" data-mode="formatter" type="button">JSON 格式化</button>
           <button class="mode-tab" data-mode="diff" type="button">差异对比</button>
           <button class="mode-tab" data-mode="jsonstr" type="button">JSONStr 转换</button>
+          <button class="mode-tab" data-mode="color" type="button">颜色解析</button>
         </nav>
       </div>
       <div class="header-actions">
@@ -157,9 +158,43 @@
       <div class="jsonstr-tip"><span>转换说明</span> 左侧输入会压缩 JSON 后再转义；右侧支持带外层引号或仅转义内容两种格式。所有转换仅在当前浏览器完成。</div>
     </section>
 
+    <section class="color-page" id="colorPage" hidden>
+      <div class="diff-intro">
+        <div><span class="step">COLOR LAB</span><strong>RGBA 与 HEX 实时互转</strong></div>
+        <div class="sub-actions">
+          <button class="text-button" id="colorSampleButton" type="button">示例颜色</button>
+          <button class="text-button" id="randomColorButton" type="button">随机颜色</button>
+        </div>
+      </div>
+      <div class="color-tool-grid">
+        <div class="panel color-preview-panel">
+          <div class="panel-head"><div><span class="step">PREVIEW</span><strong>颜色预览</strong></div><label class="native-color-label">拾色器 <input id="nativeColorPicker" type="color" value="#ff4f2d" aria-label="系统拾色器"></label></div>
+          <div class="color-preview-body">
+            <div class="color-checker"><div class="color-swatch" id="colorSwatch"></div></div>
+            <div class="color-preview-values"><strong id="colorPreviewHex">#FF4F2D</strong><code id="colorPreviewRgba">rgba(255, 79, 45, 1)</code></div>
+          </div>
+          <div class="panel-foot"><span id="colorStatus" class="valid">颜色有效 · 不透明</span></div>
+        </div>
+        <div class="panel color-control-panel">
+          <div class="panel-head"><div><span class="step">CONVERT</span><strong>颜色值转换</strong></div><span class="side-label after-label">实时同步</span></div>
+          <div class="color-controls">
+            <label class="color-value-field"><span>HEX</span><div><input id="hexColorInput" type="text" value="#FF4F2D" spellcheck="false" autocomplete="off" aria-label="HEX 颜色值"><button class="tool-button" id="copyHexButton" type="button">复制</button></div><small>支持 #RGB、#RGBA、#RRGGBB、#RRGGBBAA</small></label>
+            <label class="color-value-field"><span>RGBA</span><div><input id="rgbaColorInput" type="text" value="rgba(255, 79, 45, 1)" spellcheck="false" autocomplete="off" aria-label="RGBA 颜色值"><button class="tool-button" id="copyRgbaButton" type="button">复制</button></div><small>透明度支持 0–1 或百分比</small></label>
+            <div class="channel-controls">
+              <label><span>R <b id="redValue">255</b></span><input class="color-channel" id="redChannel" type="range" min="0" max="255" value="255"></label>
+              <label><span>G <b id="greenValue">79</b></span><input class="color-channel" id="greenChannel" type="range" min="0" max="255" value="79"></label>
+              <label><span>B <b id="blueValue">45</b></span><input class="color-channel" id="blueChannel" type="range" min="0" max="255" value="45"></label>
+              <label><span>A <b id="alphaValue">100%</b></span><input class="color-channel alpha-channel" id="alphaChannel" type="range" min="0" max="100" value="100"></label>
+            </div>
+          </div>
+          <div class="panel-foot"><span>8 位 HEX 使用 RRGGBBAA 顺序</span></div>
+        </div>
+      </div>
+    </section>
+
     <footer><span>JSON Lens</span><p>你的数据从未离开此浏览器。</p><span>NO DATA UPLOADED</span></footer>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20260717-1"></script>
+  <script src="app.js?v=20260717-2"></script>
 </body>
 </html>
