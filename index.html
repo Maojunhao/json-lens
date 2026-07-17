@@ -6,7 +6,7 @@
   <meta name="description" content="一个安全、快速、完全在浏览器本地运行的 JSON 格式化与可视化工具。">
   <meta name="color-scheme" content="dark light">
   <title>JSON Lens · JSON 格式化工具</title>
-  <link rel="stylesheet" href="styles.css?v=20260715-5">
+  <link rel="stylesheet" href="styles.css?v=20260717-1">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -21,6 +21,7 @@
         <nav class="mode-tabs" aria-label="工具切换">
           <button class="mode-tab active" data-mode="formatter" type="button">JSON 格式化</button>
           <button class="mode-tab" data-mode="diff" type="button">差异对比</button>
+          <button class="mode-tab" data-mode="jsonstr" type="button">JSONStr 转换</button>
         </nav>
       </div>
       <div class="header-actions">
@@ -133,9 +134,32 @@
       </div>
     </section>
 
+    <section class="jsonstr-page" id="jsonstrPage" hidden>
+      <div class="diff-intro">
+        <div><span class="step">JSON ⇄ JSONSTR</span><strong>JSON 与转义字符串双向转换</strong></div>
+        <div class="sub-actions">
+          <button class="text-button" id="jsonstrSampleButton" type="button">载入示例</button>
+          <button class="text-button muted" id="clearJsonstrButton" type="button">清空</button>
+        </div>
+      </div>
+      <div class="jsonstr-grid">
+        <div class="panel jsonstr-panel">
+          <div class="panel-head"><div><span class="step">JSON</span><strong>标准 JSON</strong></div><span class="side-label before-label">自动转义 →</span></div>
+          <textarea class="jsonstr-textarea" id="jsonstrJsonInput" wrap="off" spellcheck="false" autocomplete="off" aria-label="标准 JSON" placeholder="在这里粘贴标准 JSON…"></textarea>
+          <div class="panel-foot jsonstr-foot"><span id="jsonstrJsonStats">0 字符 · 等待输入</span><button class="secondary-button" id="copyJsonButton" type="button" disabled>复制 JSON</button></div>
+        </div>
+        <div class="panel jsonstr-panel">
+          <div class="panel-head"><div><span class="step">JSONSTR</span><strong>JSON 字符串</strong></div><span class="side-label after-label">← 自动还原</span></div>
+          <textarea class="jsonstr-textarea" id="jsonstrStringInput" wrap="off" spellcheck="false" autocomplete="off" aria-label="JSON 字符串" placeholder='在这里粘贴 JSONStr，例如 {\"id\":1}…'></textarea>
+          <div class="panel-foot jsonstr-foot"><span id="jsonstrStringStats">0 字符 · 等待输入</span><button class="primary-button compact" id="copyJsonstrButton" type="button" disabled>复制 JSONStr</button></div>
+        </div>
+      </div>
+      <div class="jsonstr-tip"><span>转换说明</span> 左侧输入会压缩 JSON 后再转义；右侧支持带外层引号或仅转义内容两种格式。所有转换仅在当前浏览器完成。</div>
+    </section>
+
     <footer><span>JSON Lens</span><p>你的数据从未离开此浏览器。</p><span>NO DATA UPLOADED</span></footer>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20260715-5"></script>
+  <script src="app.js?v=20260717-1"></script>
 </body>
 </html>

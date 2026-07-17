@@ -12,6 +12,7 @@ let autoFormatTimer = null;
 
 const sample = {project:'JSON Lens',version:1,features:['格式化','树形查看','搜索','压缩'],settings:{theme:'system',localOnly:true,indent:2},contributors:[{name:'Developer',active:true}],lastUpdated:null};
 const diffSamples={left:{project:'JSON Lens',version:1,settings:{theme:'light',indent:2},features:['format','tree'],deprecated:true},right:{project:'JSON Lens',version:2,settings:{theme:'dark',indent:2,autoSave:true},features:['format','tree','diff'],releasedAt:'2026-07-15'}};
+const jsonstrSample={project:'JSON Lens',features:['format','diff','jsonstr'],settings:{localOnly:true,indent:2},enabled:true};
 
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 function valueClass(value){if(value===null)return'null';if(typeof value==='string')return'string';if(typeof value==='number')return'number';if(typeof value==='boolean')return'boolean';return'';}
@@ -210,10 +211,49 @@ function runDiff(notify=false){
 }
 function scheduleDiff(){clearTimeout(diffTimer);diffTimer=setTimeout(()=>runDiff(false),350)}
 function switchMode(mode){
-  const isDiff=mode==='diff';$('#dropZone').hidden=isDiff;$('#diffPage').hidden=!isDiff;
+  $('#dropZone').hidden=mode!=='formatter';$('#diffPage').hidden=mode!=='diff';$('#jsonstrPage').hidden=mode!=='jsonstr';
   document.querySelectorAll('.mode-tab').forEach(button=>button.classList.toggle('active',button.dataset.mode===mode));
-  document.title=isDiff?'JSON Lens · JSON 差异对比':'JSON Lens · JSON 格式化工具';
+  const titles={formatter:'JSON Lens · JSON 格式化工具',diff:'JSON Lens · JSON 差异对比',jsonstr:'JSON Lens · JSONStr 双向转换'};document.title=titles[mode];
 }
+
+const jsonstrJsonInput=$('#jsonstrJsonInput');
+const jsonstrStringInput=$('#jsonstrStringInput');
+const jsonstrJsonStats=$('#jsonstrJsonStats');
+const jsonstrStringStats=$('#jsonstrStringStats');
+let jsonstrTimer=null;let jsonstrSource='json';
+function setJsonstrStatus(element,text,state=''){element.className=state;element.textContent=text}
+function setJsonstrActions(enabled){$('#copyJsonButton').disabled=!enabled;$('#copyJsonstrButton').disabled=!enabled}
+function resetJsonstr(){
+  clearTimeout(jsonstrTimer);jsonstrJsonInput.value='';jsonstrStringInput.value='';setJsonstrActions(false);
+  setJsonstrStatus(jsonstrJsonStats,'0 字符 · 等待输入');setJsonstrStatus(jsonstrStringStats,'0 字符 · 等待输入');
+}
+function decodeJsonstr(raw){
+  let decoded;
+  try{decoded=JSON.parse(raw)}
+  catch(primaryError){
+    try{decoded=JSON.parse(`"${raw.replace(/\r/g,'\\r').replace(/\n/g,'\\n')}"`)}
+    catch{throw primaryError}
+  }
+  if(typeof decoded!=='string')return decoded;
+  return JSON.parse(decoded);
+}
+function jsonToJsonstr(notify=false){
+  const raw=jsonstrJsonInput.value.trim();jsonstrSource='json';
+  if(!raw){jsonstrStringInput.value='';setJsonstrActions(false);setJsonstrStatus(jsonstrJsonStats,'0 字符 · 等待输入');setJsonstrStatus(jsonstrStringStats,'0 字符 · 等待输入');return}
+  try{
+    const value=JSON.parse(raw);const compact=JSON.stringify(value);const result=JSON.stringify(compact);jsonstrStringInput.value=result;
+    setJsonstrActions(true);setJsonstrStatus(jsonstrJsonStats,`${jsonstrJsonInput.value.length.toLocaleString()} 字符 · JSON 有效`,'valid');setJsonstrStatus(jsonstrStringStats,`${result.length.toLocaleString()} 字符 · JSONStr 已生成`,'valid');if(notify)toast('已转换为 JSONStr');
+  }catch(error){jsonstrStringInput.value='';setJsonstrActions(false);setJsonstrStatus(jsonstrJsonStats,`${jsonstrJsonInput.value.length.toLocaleString()} 字符 · JSON 无效`,'invalid');setJsonstrStatus(jsonstrStringStats,'等待有效 JSON','');}
+}
+function jsonstrToJson(notify=false){
+  const raw=jsonstrStringInput.value.trim();jsonstrSource='jsonstr';
+  if(!raw){jsonstrJsonInput.value='';setJsonstrActions(false);setJsonstrStatus(jsonstrJsonStats,'0 字符 · 等待输入');setJsonstrStatus(jsonstrStringStats,'0 字符 · 等待输入');return}
+  try{
+    const value=decodeJsonstr(raw);const result=JSON.stringify(value,null,2);jsonstrJsonInput.value=result;
+    setJsonstrActions(true);setJsonstrStatus(jsonstrStringStats,`${jsonstrStringInput.value.length.toLocaleString()} 字符 · JSONStr 有效`,'valid');setJsonstrStatus(jsonstrJsonStats,`${result.length.toLocaleString()} 字符 · JSON 已还原`,'valid');if(notify)toast('已还原为 JSON');
+  }catch(error){jsonstrJsonInput.value='';setJsonstrActions(false);setJsonstrStatus(jsonstrStringStats,`${jsonstrStringInput.value.length.toLocaleString()} 字符 · JSONStr 无效`,'invalid');setJsonstrStatus(jsonstrJsonStats,'等待有效 JSONStr','');}
+}
+function scheduleJsonstr(source){jsonstrSource=source;clearTimeout(jsonstrTimer);jsonstrTimer=setTimeout(()=>source==='json'?jsonToJsonstr():jsonstrToJson(),250)}
 
 input.addEventListener('input',()=>{updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',()=>{$('#lineNumbers').scrollTop=input.scrollTop;inputHighlight.scrollTop=input.scrollTop;inputHighlight.scrollLeft=input.scrollLeft});
 ['click','keyup','select'].forEach(eventName=>input.addEventListener(eventName,()=>renderInputHighlight()));
@@ -231,13 +271,19 @@ $('#minifyButton').addEventListener('click',()=>{formattedText=JSON.stringify(pa
 $('#downloadButton').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([formattedText],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='formatted.json';a.click();URL.revokeObjectURL(url);toast('下载已开始')});
 $('#themeButton').addEventListener('click',()=>{document.body.classList.toggle('dark');localStorage.setItem('json-lens-theme',document.body.classList.contains('dark')?'dark':'light')});
 document.querySelectorAll('.mode-tab').forEach(button=>button.addEventListener('click',()=>switchMode(button.dataset.mode)));
+jsonstrJsonInput.addEventListener('input',()=>scheduleJsonstr('json'));
+jsonstrStringInput.addEventListener('input',()=>scheduleJsonstr('jsonstr'));
+$('#jsonstrSampleButton').addEventListener('click',()=>{jsonstrJsonInput.value=JSON.stringify(jsonstrSample,null,2);jsonToJsonstr(true);jsonstrJsonInput.focus()});
+$('#clearJsonstrButton').addEventListener('click',()=>{resetJsonstr();jsonstrJsonInput.focus()});
+$('#copyJsonButton').addEventListener('click',async()=>{await navigator.clipboard.writeText(jsonstrJsonInput.value);toast('JSON 已复制')});
+$('#copyJsonstrButton').addEventListener('click',async()=>{await navigator.clipboard.writeText(jsonstrStringInput.value);toast('JSONStr 已复制')});
 diffLeft.addEventListener('input',()=>{renderRawEditor(diffLeft,diffLeftHighlight);scheduleDiff()});diffRight.addEventListener('input',()=>{renderRawEditor(diffRight,diffRightHighlight);scheduleDiff()});
 diffLeft.addEventListener('scroll',()=>{diffLeftHighlight.scrollTop=diffLeft.scrollTop;diffLeftHighlight.scrollLeft=diffLeft.scrollLeft});diffRight.addEventListener('scroll',()=>{diffRightHighlight.scrollTop=diffRight.scrollTop;diffRightHighlight.scrollLeft=diffRight.scrollLeft});
 $('#compareButton').addEventListener('click',()=>runDiff(true));
 $('#diffSampleButton').addEventListener('click',()=>{diffLeft.value=JSON.stringify(diffSamples.left,null,2);diffRight.value=JSON.stringify(diffSamples.right,null,2);runDiff(true)});
 $('#swapDiffButton').addEventListener('click',()=>{const value=diffLeft.value;diffLeft.value=diffRight.value;diffRight.value=value;runDiff()});
 $('#clearDiffButton').addEventListener('click',()=>{diffLeft.value='';diffRight.value='';clearTimeout(diffTimer);runDiff();diffLeft.focus()});
-document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();$('#diffPage').hidden?formatJson():runDiff(true)}});
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();const mode=document.querySelector('.mode-tab.active').dataset.mode;if(mode==='formatter')formatJson();else if(mode==='diff')runDiff(true);else jsonstrSource==='json'?jsonToJsonstr(true):jsonstrToJson(true)}});
 const zone=$('#dropZone');['dragenter','dragover'].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();zone.classList.add('dragging')}));['dragleave','drop'].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();zone.classList.remove('dragging')}));zone.addEventListener('drop',e=>readFile(e.dataTransfer.files[0]));
 if(localStorage.getItem('json-lens-theme')==='dark'||(!localStorage.getItem('json-lens-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 updateInputStats();renderRawEditor(diffLeft,diffLeftHighlight);renderRawEditor(diffRight,diffRightHighlight);
