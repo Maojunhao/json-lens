@@ -211,9 +211,9 @@ function runDiff(notify=false){
 }
 function scheduleDiff(){clearTimeout(diffTimer);diffTimer=setTimeout(()=>runDiff(false),350)}
 function switchMode(mode){
-  $('#dropZone').hidden=mode!=='formatter';$('#diffPage').hidden=mode!=='diff';$('#jsonstrPage').hidden=mode!=='jsonstr';$('#colorPage').hidden=mode!=='color';
+  $('#dropZone').hidden=mode!=='formatter';$('#diffPage').hidden=mode!=='diff';$('#jsonstrPage').hidden=mode!=='jsonstr';$('#colorPage').hidden=mode!=='color';$('#timestampPage').hidden=mode!=='timestamp';
   document.querySelectorAll('.mode-tab').forEach(button=>button.classList.toggle('active',button.dataset.mode===mode));
-  const titles={formatter:'JSON Lens · JSON 格式化工具',diff:'JSON Lens · JSON 差异对比',jsonstr:'JSON Lens · JSONStr 双向转换',color:'JSON Lens · RGBA HEX 颜色解析'};document.title=titles[mode];
+  const titles={formatter:'JSON Lens · JSON 格式化工具',diff:'JSON Lens · JSON 差异对比',jsonstr:'JSON Lens · JSONStr 双向转换',color:'JSON Lens · RGBA HEX 颜色解析',timestamp:'JSON Lens · 时间戳转换工具'};document.title=titles[mode];
 }
 
 const jsonstrJsonInput=$('#jsonstrJsonInput');
@@ -286,6 +286,31 @@ function invalidColor(message){colorStatus.className='invalid';colorStatus.textC
 function readColorChannels(){return{r:Number(colorChannels.r.value),g:Number(colorChannels.g.value),b:Number(colorChannels.b.value),a:Number(colorChannels.a.value)/100}}
 function randomColor(){renderColor({r:Math.floor(Math.random()*256),g:Math.floor(Math.random()*256),b:Math.floor(Math.random()*256),a:Number((.35+Math.random()*.65).toFixed(2))});toast('已生成随机颜色')}
 
+const timestampInput=$('#timestampInput');const datetimeInput=$('#datetimeInput');let convertedDate=null;
+const padDate=value=>String(value).padStart(2,'0');
+function localDatetimeValue(date){return`${date.getFullYear()}-${padDate(date.getMonth()+1)}-${padDate(date.getDate())}T${padDate(date.getHours())}:${padDate(date.getMinutes())}:${padDate(date.getSeconds())}`}
+function localDatetimeText(date){return`${date.getFullYear()}-${padDate(date.getMonth()+1)}-${padDate(date.getDate())} ${padDate(date.getHours())}:${padDate(date.getMinutes())}:${padDate(date.getSeconds())}`}
+function validDate(date){return date instanceof Date&&!Number.isNaN(date.getTime())}
+function timestampMilliseconds(raw,unit){
+  if(!raw.trim())throw new Error('等待输入时间戳');const value=Number(raw.trim());if(!Number.isFinite(value))throw new Error('请输入有效的数字时间戳');
+  if(unit==='seconds')return value*1000;if(unit==='milliseconds')return value;
+  return Math.abs(value)<100000000000?value*1000:value;
+}
+function renderTimestampDate(){
+  try{
+    const date=new Date(timestampMilliseconds(timestampInput.value,$('#timestampUnit').value));if(!validDate(date))throw new Error('时间戳超出可转换范围');convertedDate=date;
+    $('#timestampLocalResult').textContent=localDatetimeText(date);$('#timestampIsoResult').textContent=date.toISOString();$('#timestampWeekdayResult').textContent=new Intl.DateTimeFormat('zh-CN',{weekday:'long'}).format(date);
+    $('#timestampStatus').className='valid';$('#timestampStatus').textContent='转换成功';$('#copyTimestampDateButton').disabled=false;
+  }catch(error){convertedDate=null;$('#timestampLocalResult').textContent='--';$('#timestampIsoResult').textContent='--';$('#timestampWeekdayResult').textContent='--';$('#timestampStatus').className='invalid';$('#timestampStatus').textContent=timestampInput.value.trim()?error.message:'等待输入时间戳';$('#copyTimestampDateButton').disabled=true}
+}
+function renderDatetimeTimestamp(){
+  const date=new Date(datetimeInput.value);const valid=datetimeInput.value&&validDate(date);$('#secondsResult').textContent=valid?Math.floor(date.getTime()/1000):'--';$('#millisecondsResult').textContent=valid?date.getTime():'--';
+  $('#datetimeStatus').className=valid?'valid':'invalid';$('#datetimeStatus').textContent=valid?'转换成功 · 当前浏览器本地时区':'选择日期时间后自动转换';return valid;
+}
+function useCurrentTime(){const now=new Date();datetimeInput.value=localDatetimeValue(now);timestampInput.value=now.getTime();$('#timestampUnit').value='milliseconds';renderTimestampDate();renderDatetimeTimestamp()}
+function updateCurrentClock(){const now=new Date();$('#currentTimeText').textContent=localDatetimeText(now);$('#currentSeconds').textContent=Math.floor(now.getTime()/1000);$('#currentMilliseconds').textContent=now.getTime()}
+async function copyTextValue(value,message){await navigator.clipboard.writeText(String(value));toast(message)}
+
 input.addEventListener('input',()=>{updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',()=>{$('#lineNumbers').scrollTop=input.scrollTop;inputHighlight.scrollTop=input.scrollTop;inputHighlight.scrollLeft=input.scrollLeft});
 ['click','keyup','select'].forEach(eventName=>input.addEventListener(eventName,()=>renderInputHighlight()));
 input.addEventListener('mousemove',event=>renderInputHighlight(hoveredInputPosition(event)));
@@ -317,6 +342,13 @@ $('#copyHexButton').addEventListener('click',async()=>{await navigator.clipboard
 $('#copyRgbaButton').addEventListener('click',async()=>{await navigator.clipboard.writeText(colorToRgba(currentColor));toast('RGBA 已复制')});
 $('#colorSampleButton').addEventListener('click',()=>{renderColor({r:255,g:79,b:45,a:.72});toast('已载入示例颜色')});
 $('#randomColorButton').addEventListener('click',randomColor);
+timestampInput.addEventListener('input',renderTimestampDate);$('#timestampUnit').addEventListener('change',renderTimestampDate);datetimeInput.addEventListener('input',renderDatetimeTimestamp);
+$('#timestampNowButton').addEventListener('click',()=>{useCurrentTime();toast('已使用当前时间')});
+$('#copyTimestampDateButton').addEventListener('click',()=>convertedDate&&copyTextValue(localDatetimeText(convertedDate),'日期时间已复制'));
+$('#copySecondsButton').addEventListener('click',()=>renderDatetimeTimestamp()&&copyTextValue($('#secondsResult').textContent,'秒时间戳已复制'));
+$('#copyMillisecondsButton').addEventListener('click',()=>renderDatetimeTimestamp()&&copyTextValue($('#millisecondsResult').textContent,'毫秒时间戳已复制'));
+$('#copyCurrentSeconds').addEventListener('click',()=>copyTextValue($('#currentSeconds').textContent,'当前秒时间戳已复制'));
+$('#copyCurrentMilliseconds').addEventListener('click',()=>copyTextValue($('#currentMilliseconds').textContent,'当前毫秒时间戳已复制'));
 diffLeft.addEventListener('input',()=>{renderRawEditor(diffLeft,diffLeftHighlight);scheduleDiff()});diffRight.addEventListener('input',()=>{renderRawEditor(diffRight,diffRightHighlight);scheduleDiff()});
 diffLeft.addEventListener('scroll',()=>{diffLeftHighlight.scrollTop=diffLeft.scrollTop;diffLeftHighlight.scrollLeft=diffLeft.scrollLeft});diffRight.addEventListener('scroll',()=>{diffRightHighlight.scrollTop=diffRight.scrollTop;diffRightHighlight.scrollLeft=diffRight.scrollLeft});
 $('#compareButton').addEventListener('click',()=>runDiff(true));
@@ -326,4 +358,5 @@ $('#clearDiffButton').addEventListener('click',()=>{diffLeft.value='';diffRight.
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();const mode=document.querySelector('.mode-tab.active').dataset.mode;if(mode==='formatter')formatJson();else if(mode==='diff')runDiff(true);else if(mode==='jsonstr')jsonstrSource==='json'?jsonToJsonstr(true):jsonstrToJson(true)}});
 const zone=$('#dropZone');['dragenter','dragover'].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();zone.classList.add('dragging')}));['dragleave','drop'].forEach(type=>zone.addEventListener(type,e=>{e.preventDefault();zone.classList.remove('dragging')}));zone.addEventListener('drop',e=>readFile(e.dataTransfer.files[0]));
 if(localStorage.getItem('json-lens-theme')==='dark'||(!localStorage.getItem('json-lens-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
+$('#timezoneText').textContent=Intl.DateTimeFormat().resolvedOptions().timeZone||'本地时区';updateCurrentClock();setInterval(updateCurrentClock,1000);
 updateInputStats();renderRawEditor(diffLeft,diffLeftHighlight);renderRawEditor(diffRight,diffRightHighlight);renderColor(currentColor);

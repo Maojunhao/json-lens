@@ -6,7 +6,7 @@
   <meta name="description" content="一个安全、快速、完全在浏览器本地运行的 JSON 格式化与可视化工具。">
   <meta name="color-scheme" content="dark light">
   <title>JSON Lens · JSON 格式化工具</title>
-  <link rel="stylesheet" href="styles.css?v=20260717-2">
+  <link rel="stylesheet" href="styles.css?v=20260717-3">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -23,6 +23,7 @@
           <button class="mode-tab" data-mode="diff" type="button">差异对比</button>
           <button class="mode-tab" data-mode="jsonstr" type="button">JSONStr 转换</button>
           <button class="mode-tab" data-mode="color" type="button">颜色解析</button>
+          <button class="mode-tab" data-mode="timestamp" type="button">时间戳</button>
         </nav>
       </div>
       <div class="header-actions">
@@ -192,9 +193,52 @@
       </div>
     </section>
 
+    <section class="timestamp-page" id="timestampPage" hidden>
+      <div class="diff-intro">
+        <div><span class="step">TIME LAB</span><strong>时间戳与日期时间实时互转</strong></div>
+        <div class="sub-actions">
+          <button class="text-button" id="timestampNowButton" type="button">使用当前时间</button>
+        </div>
+      </div>
+      <div class="timestamp-now panel">
+        <div><span>当前时间</span><strong id="currentTimeText">--</strong><small id="timezoneText">--</small></div>
+        <div class="timestamp-now-values">
+          <button type="button" id="copyCurrentSeconds"><span>秒</span><b id="currentSeconds">--</b></button>
+          <button type="button" id="copyCurrentMilliseconds"><span>毫秒</span><b id="currentMilliseconds">--</b></button>
+        </div>
+      </div>
+      <div class="timestamp-grid">
+        <div class="panel timestamp-panel">
+          <div class="panel-head"><div><span class="step">TIMESTAMP</span><strong>时间戳转日期</strong></div><span class="side-label after-label">自动识别单位</span></div>
+          <div class="timestamp-controls">
+            <label class="timestamp-field"><span>时间戳</span><input id="timestampInput" type="text" inputmode="numeric" value="" placeholder="例如 1752739200 或 1752739200000" autocomplete="off"></label>
+            <label class="timestamp-field compact"><span>输入单位</span><select id="timestampUnit"><option value="auto">自动识别</option><option value="seconds">秒</option><option value="milliseconds">毫秒</option></select></label>
+            <div class="timestamp-result">
+              <div><span>本地时间</span><strong id="timestampLocalResult">--</strong></div>
+              <div><span>ISO 8601</span><code id="timestampIsoResult">--</code></div>
+              <div><span>星期</span><strong id="timestampWeekdayResult">--</strong></div>
+            </div>
+          </div>
+          <div class="panel-foot"><span id="timestampStatus" class="valid">等待输入时间戳</span><button class="tool-button" id="copyTimestampDateButton" type="button" disabled>复制日期</button></div>
+        </div>
+        <div class="panel timestamp-panel">
+          <div class="panel-head"><div><span class="step">DATE TIME</span><strong>日期时间转时间戳</strong></div><span class="side-label before-label">本地时区</span></div>
+          <div class="timestamp-controls">
+            <label class="timestamp-field"><span>本地日期时间</span><input id="datetimeInput" type="datetime-local" step="1"></label>
+            <div class="timestamp-result timestamp-number-result">
+              <button type="button" id="copySecondsButton"><span>秒时间戳</span><strong id="secondsResult">--</strong></button>
+              <button type="button" id="copyMillisecondsButton"><span>毫秒时间戳</span><strong id="millisecondsResult">--</strong></button>
+            </div>
+          </div>
+          <div class="panel-foot"><span id="datetimeStatus" class="valid">选择日期时间后自动转换</span><span>点击结果即可复制</span></div>
+        </div>
+      </div>
+      <div class="jsonstr-tip"><span>转换说明</span> 日期时间按当前浏览器的本地时区解析；秒级和毫秒级时间戳均可自动识别，转换过程完全在本地完成。</div>
+    </section>
+
     <footer><span>JSON Lens</span><p>你的数据从未离开此浏览器。</p><span>NO DATA UPLOADED</span></footer>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20260717-2"></script>
+  <script src="app.js?v=20260717-3"></script>
 </body>
 </html>
