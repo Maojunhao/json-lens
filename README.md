@@ -12,6 +12,8 @@ python3 -m http.server 8080
 
 然后访问 <http://localhost:8080>。
 
+报文规则工具地址：<http://localhost:8080/rule-lab.html>
+
 ## 在线地址
 
 部署完成后访问：<https://maojunhao.github.io/json-lens/>
@@ -32,3 +34,5 @@ python3 -m http.server 8080
 - 错误位置提示
 - 深色模式与响应式布局
 - 数据全程在本地处理
+- 从 JSON、CSV、XML、TXT 样例自动推断字段校验规则
+- 规则列表本地留存、重新编辑与异常报文标红
