@@ -12,7 +12,7 @@ python3 -m http.server 8080
 
 然后访问 <http://localhost:8080>。
 
-报文规则工具地址：<http://localhost:8080/rule-lab.html>
+测试专用工具地址：<http://localhost:8080/qa-rule-lab.html>
 
 ## 在线地址
 

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="从示例文档推断字段规则，并用规则自动校验测试报文。">
+  <title>QA Rule Lab · 测试报文规则校验</title>
+  <link rel="stylesheet" href="styles.css?v=20260720-1">
+  <link rel="stylesheet" href="rule-lab.css?v=20260720-1">
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <main class="app-shell rule-shell">
+    <header class="topbar">
+      <div class="brand-zone">
+        <a class="brand" href="qa-rule-lab.html"><span class="brand-mark">QA</span><span><b>QA Rule Lab</b><small>TEST MESSAGE INSPECTOR</small></span></a>
+      </div>
+      <div class="header-actions"><span class="privacy"><i></i> 数据仅在本地处理</span><button class="icon-button" id="themeButton" type="button" aria-label="切换主题">☼</button></div>
+    </header>
+
+    <div class="flow-tabs" role="tablist">
+      <button class="flow-tab active" data-view="create" type="button"><span>01</span> 生成规则</button>
+      <button class="flow-tab" data-view="library" type="button"><span>02</span> 规则列表 <b id="ruleCount">0</b></button>
+      <button class="flow-tab" data-view="validate" type="button"><span>03</span> 校验报文</button>
+    </div>
+
+    <section id="createView" class="rule-view">
+      <div class="create-grid">
+        <div class="panel source-panel">
+          <div class="panel-head"><div><span class="step">INPUT</span><strong>正确样例文档</strong></div><button class="text-button" id="loadSample" type="button">载入示例</button></div>
+          <label class="drop-card" id="schemaDrop">
+            <input id="schemaFile" type="file" accept=".json,.csv,.xml,.txt,application/json,text/csv,text/xml,text/plain" hidden>
+            <span class="drop-symbol">↓</span><strong>拖入或点击选择文档</strong><small>支持 JSON / CSV / XML / TXT，单文件不超过 5MB</small>
+          </label>
+          <div class="paste-block"><div><span>或直接粘贴</span><span id="sourceType">等待数据</span></div><textarea id="schemaInput" spellcheck="false" placeholder='例如：{"name":"张三","mobile":"13800138000"}'></textarea></div>
+          <div class="panel-foot"><span id="schemaStatus">等待导入正确样例</span><button class="primary-button" id="analyzeButton" type="button">拆解并推断规则</button></div>
+        </div>
+        <div class="panel rules-panel">
+          <div class="panel-head"><div><span class="step">RULES</span><strong>字段规则</strong></div><span class="detect-badge" id="detectBadge">尚未分析</span></div>
+          <div class="rule-meta"><label>规则名称<input id="ruleName" value="用户资料报文规则" maxlength="50"></label><label>说明<input id="ruleDesc" placeholder="例如：开户注册接口 v2"></label></div>
+          <div class="rules-table-wrap"><table class="rules-table"><thead><tr><th>字段路径</th><th>样例值</th><th>识别格式</th><th>必填</th><th>操作</th></tr></thead><tbody id="rulesBody"><tr class="table-empty"><td colspan="5">导入样例后，将在这里生成可编辑规则</td></tr></tbody></table></div>
+          <div class="panel-foot"><span id="ruleHint">格式和正则均可手动调整</span><button class="primary-button" id="saveRule" type="button" disabled>确认并保存规则</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="libraryView" class="rule-view" hidden>
+      <div class="library-head"><div><span class="step">SAVED RULES</span><h2>已留存的规则</h2><p>规则保存在当前浏览器中，可随时打开、编辑和执行校验。</p></div><button class="primary-button" data-go="create" type="button">＋ 新建规则</button></div>
+      <div class="library-grid" id="libraryGrid"></div>
+    </section>
+
+    <section id="validateView" class="rule-view" hidden>
+      <div class="validate-toolbar panel"><label>选择规则<select id="validateRule"></select></label><div class="summary-pills" id="summaryPills"><span>等待校验</span></div></div>
+      <div class="validate-grid">
+        <div class="panel">
+          <div class="panel-head"><div><span class="step">MESSAGE</span><strong>待测报文</strong></div><button class="text-button" id="badSample" type="button">载入异常示例</button></div>
+          <label class="mini-drop" id="messageDrop"><input id="messageFile" type="file" accept=".json,.csv,.xml,.txt" hidden><b>拖入报文</b><span>或点击选择文件</span></label>
+          <textarea class="message-input" id="messageInput" spellcheck="false" placeholder="在这里粘贴待校验报文…"></textarea>
+          <div class="panel-foot"><span id="messageStatus">等待报文</span><button class="primary-button" id="validateButton" type="button">执行校验</button></div>
+        </div>
+        <div class="panel result-panel">
+          <div class="panel-head"><div><span class="step">REPORT</span><strong>校验结果</strong></div><button class="text-button" id="onlyErrors" type="button">仅看异常</button></div>
+          <div class="validation-results" id="validationResults"><div class="result-empty"><span>✓</span><strong>等待执行校验</strong><p>异常字段将在这里标红，并说明未通过的规则。</p></div></div>
+        </div>
+      </div>
+    </section>
+    <footer><span>QA RULE LAB</span><p>字段推断仅作为规则初稿，请由测试人员确认后使用。</p><span>LOCAL · PRIVATE</span></footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="rule-lab.js?v=20260720-1"></script>
+</body>
+</html>
