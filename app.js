@@ -14,6 +14,7 @@ let currentSearchIndex = -1;
 let inputSearchMatches = [];
 let outputSearchMatches = [];
 let treeSearchRows = [];
+let selectedTreePath = '';
 
 const sample = {project:'JSON Lens',version:1,features:['格式化','树形查看','搜索','压缩'],settings:{theme:'system',localOnly:true,indent:2},contributors:[{name:'Developer',active:true}],lastUpdated:null};
 const diffSamples={left:{project:'JSON Lens',version:1,settings:{theme:'light',indent:2},features:['format','tree'],deprecated:true},right:{project:'JSON Lens',version:2,settings:{theme:'dark',indent:2,autoSave:true},features:['format','tree','diff'],releasedAt:'2026-07-15'}};
@@ -78,13 +79,13 @@ function hoveredInputPosition(event){
   return start+Math.min(column,end-start);
 }
 
-function makeNode(key,value,isRoot=false){
+function makeNode(key,value,isRoot=false,path='$'){
   const wrapper=document.createElement('div'); wrapper.className=isRoot?'tree-root':'tree-node';
-  const row=document.createElement('div'); row.className='tree-row';
+  const row=document.createElement('div'); row.className='tree-row';row.dataset.jsonPath=path;
   const complex=value!==null&&typeof value==='object';
   const toggle=document.createElement('button'); toggle.className=`toggle${complex?'':' placeholder'}`; toggle.textContent='▾'; toggle.type='button'; row.appendChild(toggle);
   if(!isRoot){const keyEl=document.createElement('span');keyEl.className='key';keyEl.textContent=`"${key}"`;row.appendChild(keyEl);row.insertAdjacentHTML('beforeend','<span class="meta">: </span>');}
-  if(complex){const isArray=Array.isArray(value);const meta=document.createElement('span');meta.className='meta';meta.textContent=`${isArray?'Array':'Object'} (${isArray?value.length:Object.keys(value).length})`;row.appendChild(meta);const children=document.createElement('div');children.className='children';Object.entries(value).forEach(([k,v])=>{const child=makeNode(k,v);if(isArray){const keyEl=child.querySelector('.key');if(keyEl)keyEl.textContent=k;}children.appendChild(child)});toggle.addEventListener('click',()=>{children.classList.toggle('collapsed');toggle.textContent=children.classList.contains('collapsed')?'▸':'▾'});wrapper.append(row,children);
+  if(complex){const isArray=Array.isArray(value);const meta=document.createElement('span');meta.className='meta';meta.textContent=`${isArray?'Array':'Object'} (${isArray?value.length:Object.keys(value).length})`;row.appendChild(meta);const children=document.createElement('div');children.className='children';Object.entries(value).forEach(([k,v])=>{const itemPath=childPath(path,k,isArray);const child=makeNode(k,v,false,itemPath);if(isArray){const keyEl=child.querySelector('.key');if(keyEl)keyEl.textContent=k;}children.appendChild(child)});toggle.addEventListener('click',()=>{children.classList.toggle('collapsed');toggle.textContent=children.classList.contains('collapsed')?'▸':'▾'});wrapper.append(row,children);
   }else{const val=document.createElement('span');val.className=valueClass(value);val.textContent=value===null?'null':typeof value==='string'?`"${value}"`:String(value);row.appendChild(val);wrapper.appendChild(row)}
   return wrapper;
 }
@@ -142,22 +143,69 @@ function revealTreeRow(row){
   }
   row.scrollIntoView({block:'center',inline:'nearest'});
 }
+function treeRowByPath(path){return Array.from(treeView.querySelectorAll('.tree-row')).find(row=>row.dataset.jsonPath===path)||null}
+function showTreePath(row){
+  treeView.querySelectorAll('.node-path-hint').forEach(hint=>hint.remove());
+  if(!row)return;
+  const hint=document.createElement('span');hint.className='node-path-hint';hint.textContent=row.dataset.jsonPath||'$';row.appendChild(hint);
+}
+function selectedJsonKeyPath(text,selectionStart,selectionEnd){
+  let cursor=0;const ranges=[];
+  function skipSpace(){while(cursor<text.length&&/\s/.test(text[cursor]))cursor++}
+  function readString(){
+    skipSpace();if(text[cursor]!=='"')throw new Error('Expected string');
+    const start=cursor++;
+    while(cursor<text.length){
+      if(text[cursor]==='\\'){cursor+=2;continue}
+      if(text[cursor++]==='"')return{start,end:cursor,value:JSON.parse(text.slice(start,cursor))};
+    }
+    throw new Error('Unclosed string');
+  }
+  function parseValue(path){
+    skipSpace();const char=text[cursor];
+    if(char==='{'){
+      cursor++;skipSpace();if(text[cursor]==='}'){cursor++;return}
+      while(cursor<text.length){
+        const key=readString();skipSpace();if(text[cursor++]!==':')throw new Error('Expected colon');
+        const itemPath=childPath(path,key.value);ranges.push({start:key.start,end:key.end,path:itemPath});parseValue(itemPath);skipSpace();
+        if(text[cursor]===','){cursor++;continue}if(text[cursor]==='}'){cursor++;return}throw new Error('Expected object end');
+      }
+    }
+    if(char==='['){
+      cursor++;skipSpace();if(text[cursor]===']'){cursor++;return}
+      let index=0;while(cursor<text.length){parseValue(childPath(path,index++,true));skipSpace();if(text[cursor]===','){cursor++;continue}if(text[cursor]===']'){cursor++;return}throw new Error('Expected array end')}
+    }
+    if(char==='"'){readString();return}
+    while(cursor<text.length&&!/[\s,\]}]/.test(text[cursor]))cursor++;
+  }
+  try{parseValue('$')}catch{return''}
+  return ranges.find(range=>selectionStart>=range.start&&selectionEnd<=range.end)?.path||'';
+}
+function focusSelectedKey(path){
+  const row=treeRowByPath(path);if(!row)return;
+  selectedTreePath=path;
+  if(currentView!=='tree')switchView('tree');
+  treeView.querySelectorAll('.tree-row').forEach(item=>item.classList.remove('current-match','selected-key-row'));
+  row.classList.add('current-match','selected-key-row');showTreePath(row);requestAnimationFrame(()=>revealTreeRow(row));
+}
 function renderSearchHighlights(scroll=true){
   renderedSearchKey=null;renderInputHighlight();
   const code=codeView.querySelector('code');code.innerHTML=markedText(formattedText,outputSearchMatches,currentSearchIndex);
-  treeView.querySelectorAll('.tree-row').forEach(row=>row.classList.remove('search-match-row','current-match'));
-  treeSearchRows.forEach((row,index)=>{row.classList.add('search-match-row');if(index===Math.min(currentSearchIndex,treeSearchRows.length-1))row.classList.add('current-match')});
+  treeView.querySelectorAll('.tree-row').forEach(row=>row.classList.remove('search-match-row','current-match','selected-key-row'));
+  treeSearchRows.forEach(row=>row.classList.add('search-match-row'));
+  const searchedRow=treeSearchRows[Math.min(currentSearchIndex,treeSearchRows.length-1)];const selectedRow=selectedTreePath?treeRowByPath(selectedTreePath):null;const activeRow=selectedRow||searchedRow;
+  if(activeRow)activeRow.classList.add('current-match',...(selectedRow?['selected-key-row']:[]));showTreePath(activeRow);
   const total=outputSearchMatches.length;$('#searchCount').textContent=total?`${currentSearchIndex+1} / ${total}`:'0 / 0';
   $('#previousMatchButton').disabled=!total;$('#nextMatchButton').disabled=!total;
   if(!scroll||currentSearchIndex<0)return;
   scrollInputToMatch(inputSearchMatches[Math.min(currentSearchIndex,inputSearchMatches.length-1)]);
   requestAnimationFrame(()=>{
     if(currentView==='code')code.querySelector('.text-search-match.current')?.scrollIntoView({block:'center',inline:'nearest'});
-    else revealTreeRow(treeSearchRows[Math.min(currentSearchIndex,treeSearchRows.length-1)]);
+    else revealTreeRow(activeRow);
   });
 }
 function refreshSearch(resetIndex=true,scroll=true){
-  searchQuery=$('#searchInput').value.trim();inputSearchMatches=findTextMatches(input.value,searchQuery);outputSearchMatches=findTextMatches(formattedText,searchQuery);treeSearchRows=treeRowsForQuery(searchQuery);
+  selectedTreePath='';searchQuery=$('#searchInput').value.trim();inputSearchMatches=findTextMatches(input.value,searchQuery);outputSearchMatches=findTextMatches(formattedText,searchQuery);treeSearchRows=treeRowsForQuery(searchQuery);
   if(resetIndex)currentSearchIndex=outputSearchMatches.length?0:-1;
   else if(outputSearchMatches.length)currentSearchIndex=Math.min(Math.max(currentSearchIndex,0),outputSearchMatches.length-1);
   else currentSearchIndex=-1;
@@ -165,6 +213,7 @@ function refreshSearch(resetIndex=true,scroll=true){
 }
 function moveSearch(step){
   if(!outputSearchMatches.length)return;
+  selectedTreePath='';
   currentSearchIndex=(currentSearchIndex+step+outputSearchMatches.length)%outputSearchMatches.length;
   renderSearchHighlights(true);
 }
@@ -400,8 +449,9 @@ function useCurrentTime(){const now=new Date();datetimeInput.value=localDatetime
 function updateCurrentClock(){const now=new Date();$('#currentTimeText').textContent=localDatetimeText(now);$('#currentSeconds').textContent=Math.floor(now.getTime()/1000);$('#currentMilliseconds').textContent=now.getTime()}
 async function copyTextValue(value,message){await navigator.clipboard.writeText(String(value));toast(message)}
 
-input.addEventListener('input',()=>{inputSearchMatches=findTextMatches(input.value,searchQuery);renderedSearchKey=null;updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',syncInputOverlay);
+input.addEventListener('input',()=>{selectedTreePath='';inputSearchMatches=findTextMatches(input.value,searchQuery);renderedSearchKey=null;updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',syncInputOverlay);
 ['click','keyup','select'].forEach(eventName=>input.addEventListener(eventName,()=>renderInputHighlight()));
+input.addEventListener('dblclick',event=>{const pointerPosition=hoveredInputPosition(event);requestAnimationFrame(()=>{const selectedPath=selectedJsonKeyPath(input.value,input.selectionStart,input.selectionEnd);const pointedPath=selectedJsonKeyPath(input.value,pointerPosition,pointerPosition);const path=selectedPath||pointedPath;if(path)focusSelectedKey(path)})});
 input.addEventListener('mousemove',event=>renderInputHighlight(hoveredInputPosition(event)));
 input.addEventListener('mouseleave',()=>renderInputHighlight());
 $('#formatButton').addEventListener('click',formatJson);$('#sampleButton').addEventListener('click',()=>{input.value=JSON.stringify(sample);updateInputStats();formatJson()});
