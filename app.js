@@ -9,6 +9,11 @@ let parsedData = null;
 let formattedText = '';
 let currentView = 'tree';
 let autoFormatTimer = null;
+let searchQuery = '';
+let currentSearchIndex = -1;
+let inputSearchMatches = [];
+let outputSearchMatches = [];
+let treeSearchRows = [];
 
 const sample = {project:'JSON Lens',version:1,features:['格式化','树形查看','搜索','压缩'],settings:{theme:'system',localOnly:true,indent:2},contributors:[{name:'Developer',active:true}],lastUpdated:null};
 const diffSamples={left:{project:'JSON Lens',version:1,settings:{theme:'light',indent:2},features:['format','tree'],deprecated:true},right:{project:'JSON Lens',version:2,settings:{theme:'dark',indent:2,autoSave:true},features:['format','tree','diff'],releasedAt:'2026-07-15'}};
@@ -32,12 +37,12 @@ function bracketPairs(text){
   }
   return pairs;
 }
-let bracketCacheText=null;let bracketCache=new Map();let bracketLineStarts=[0];let renderedBracketText=null;let renderedBracketKey=null;
+let bracketCacheText=null;let bracketCache=new Map();let bracketLineStarts=[0];let renderedBracketText=null;let renderedBracketKey=null;let renderedSearchKey=null;
 function ensureBracketCache(text){
   if(bracketCacheText===text)return;
   bracketCacheText=text;bracketCache=bracketPairs(text);bracketLineStarts=[0];
   for(let i=0;i<text.length;i++)if(text[i]==='\n')bracketLineStarts.push(i+1);
-  renderedBracketText=null;renderedBracketKey=null;
+  renderedBracketText=null;renderedBracketKey=null;renderedSearchKey=null;
 }
 function adjacentBracketIndex(text,position){
   const brackets='{}[]';
@@ -48,11 +53,17 @@ function adjacentBracketIndex(text,position){
 function renderInputHighlight(position=input.selectionStart){
   const text=input.value;ensureBracketCache(text);const index=adjacentBracketIndex(text,position);const match=bracketCache.get(index);
   const key=index<0||match===undefined?'':`${Math.min(index,match)}:${Math.max(index,match)}`;
-  if(renderedBracketText===text&&renderedBracketKey===key)return;
-  renderedBracketText=text;renderedBracketKey=key;
-  if(!key){inputHighlight.textContent=text;return}
-  const marked=new Set([index,match]);let html='';
-  for(let i=0;i<text.length;i++)html+=marked.has(i)?`<strong class="matched-bracket">${escapeHtml(text[i])}</strong>`:escapeHtml(text[i]);
+  const searchKey=`${searchQuery}:${currentSearchIndex}:${inputSearchMatches.length}`;
+  if(renderedBracketText===text&&renderedBracketKey===key&&renderedSearchKey===searchKey)return;
+  renderedBracketText=text;renderedBracketKey=key;renderedSearchKey=searchKey;
+  if(!key&&!inputSearchMatches.length){inputHighlight.textContent=text;return}
+  const marked=new Set(key?[index,match]:[]);const activeInputIndex=Math.min(currentSearchIndex,inputSearchMatches.length-1);let html='';let matchCursor=0;
+  for(let i=0;i<text.length;i++){
+    const searchMatch=inputSearchMatches[matchCursor];
+    if(searchMatch&&i===searchMatch.start)html+=`<mark class="text-search-match${matchCursor===activeInputIndex?' current':''}">`;
+    html+=marked.has(i)?`<strong class="matched-bracket">${escapeHtml(text[i])}</strong>`:escapeHtml(text[i]);
+    if(searchMatch&&i+1===searchMatch.end){html+='</mark>';matchCursor++}
+  }
   inputHighlight.innerHTML=html;
 }
 function hoveredInputPosition(event){
@@ -82,8 +93,85 @@ function updateInputStats(){const lines=input.value.split('\n').length;$('#input
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(el.timer);el.timer=setTimeout(()=>el.classList.remove('show'),1800);}
 function setActions(enabled){['#copyButton','#downloadButton','#minifyButton'].forEach(id=>$(id).disabled=!enabled)}
 
+function findTextMatches(text,query){
+  if(!query)return[];
+  const source=text.toLocaleLowerCase();const needle=query.toLocaleLowerCase();const matches=[];let from=0;
+  while(from<=source.length-needle.length){const start=source.indexOf(needle,from);if(start<0)break;matches.push({start,end:start+needle.length});from=start+Math.max(needle.length,1)}
+  return matches;
+}
+function treeRowsForQuery(query){
+  if(!query)return[];
+  const needle=query.toLocaleLowerCase();const rows=[];
+  treeView.querySelectorAll('.tree-row').forEach(row=>{
+    const searchable=Array.from(row.querySelectorAll('.key,.string,.number,.boolean,.null')).map(node=>node.textContent).join(': ');
+    if(searchable.toLocaleLowerCase().includes(needle))rows.push(row);
+  });
+  return rows;
+}
+function markedText(text,matches,currentIndex){
+  if(!matches.length)return escapeHtml(text);
+  let html='';let cursor=0;
+  matches.forEach((match,index)=>{
+    html+=escapeHtml(text.slice(cursor,match.start));
+    html+=`<mark class="text-search-match${index===currentIndex?' current':''}">${escapeHtml(text.slice(match.start,match.end))}</mark>`;
+    cursor=match.end;
+  });
+  return html+escapeHtml(text.slice(cursor));
+}
+function syncInputOverlay(){inputHighlight.scrollTop=input.scrollTop;inputHighlight.scrollLeft=input.scrollLeft;$('#lineNumbers').scrollTop=input.scrollTop}
+function scrollInputToMatch(match){
+  if(!match)return;
+  const before=input.value.slice(0,match.start);const lastBreak=before.lastIndexOf('\n');const line=before.split('\n').length-1;const column=match.start-lastBreak-1;
+  const style=getComputedStyle(input);const lineHeight=parseFloat(style.lineHeight)||21;
+  const canvas=scrollInputToMatch.canvas||(scrollInputToMatch.canvas=document.createElement('canvas'));const context=canvas.getContext('2d');context.font=style.font;
+  const charWidth=context.measureText('M').width||8;
+  input.scrollTop=Math.max(0,line*lineHeight-input.clientHeight/2+lineHeight);
+  input.scrollLeft=Math.max(0,column*charWidth-input.clientWidth/2);
+  syncInputOverlay();
+}
+function revealTreeRow(row){
+  if(!row)return;
+  let ancestor=row.parentElement;
+  while(ancestor&&ancestor!==treeView){
+    if(ancestor.classList.contains('children')){
+      ancestor.classList.remove('collapsed');
+      const toggle=ancestor.parentElement?.querySelector(':scope > .tree-row > .toggle');
+      if(toggle)toggle.textContent='▾';
+    }
+    ancestor=ancestor.parentElement;
+  }
+  row.scrollIntoView({block:'center',inline:'nearest'});
+}
+function renderSearchHighlights(scroll=true){
+  renderedSearchKey=null;renderInputHighlight();
+  const code=codeView.querySelector('code');code.innerHTML=markedText(formattedText,outputSearchMatches,currentSearchIndex);
+  treeView.querySelectorAll('.tree-row').forEach(row=>row.classList.remove('search-match-row','current-match'));
+  treeSearchRows.forEach((row,index)=>{row.classList.add('search-match-row');if(index===Math.min(currentSearchIndex,treeSearchRows.length-1))row.classList.add('current-match')});
+  const total=outputSearchMatches.length;$('#searchCount').textContent=total?`${currentSearchIndex+1} / ${total}`:'0 / 0';
+  $('#previousMatchButton').disabled=!total;$('#nextMatchButton').disabled=!total;
+  if(!scroll||currentSearchIndex<0)return;
+  scrollInputToMatch(inputSearchMatches[Math.min(currentSearchIndex,inputSearchMatches.length-1)]);
+  requestAnimationFrame(()=>{
+    if(currentView==='code')code.querySelector('.text-search-match.current')?.scrollIntoView({block:'center',inline:'nearest'});
+    else revealTreeRow(treeSearchRows[Math.min(currentSearchIndex,treeSearchRows.length-1)]);
+  });
+}
+function refreshSearch(resetIndex=true,scroll=true){
+  searchQuery=$('#searchInput').value.trim();inputSearchMatches=findTextMatches(input.value,searchQuery);outputSearchMatches=findTextMatches(formattedText,searchQuery);treeSearchRows=treeRowsForQuery(searchQuery);
+  if(resetIndex)currentSearchIndex=outputSearchMatches.length?0:-1;
+  else if(outputSearchMatches.length)currentSearchIndex=Math.min(Math.max(currentSearchIndex,0),outputSearchMatches.length-1);
+  else currentSearchIndex=-1;
+  renderSearchHighlights(scroll);
+}
+function moveSearch(step){
+  if(!outputSearchMatches.length)return;
+  currentSearchIndex=(currentSearchIndex+step+outputSearchMatches.length)%outputSearchMatches.length;
+  renderSearchHighlights(true);
+}
+
 function resetResult(focusInput=false){
   parsedData=null;formattedText='';treeView.hidden=true;codeView.hidden=true;errorView.hidden=true;emptyState.hidden=false;setActions(false);$('#outputStats').textContent='尚未解析';
+  refreshSearch(true,false);
   if(focusInput)input.focus();
 }
 
@@ -93,16 +181,17 @@ function formatJson(notify=true){
     parsedData=JSON.parse(input.value);formattedText=JSON.stringify(parsedData,null,2);
     treeView.replaceChildren(makeNode('root',parsedData,true));codeView.querySelector('code').textContent=formattedText;
     emptyState.hidden=true;errorView.hidden=true;setActions(true);switchView(currentView);
+    refreshSearch(false);
     const type=Array.isArray(parsedData)?'数组':parsedData!==null&&typeof parsedData==='object'?'对象':typeof parsedData;
     const count=parsedData!==null&&typeof parsedData==='object'?Object.keys(parsedData).length:1;
     $('#outputStats').textContent=`有效 JSON · ${type} · ${count} 个顶层项`;if(notify)toast('格式化完成');
   }catch(error){
-    parsedData=null;formattedText='';setActions(false);emptyState.hidden=true;treeView.hidden=true;codeView.hidden=true;errorView.hidden=false;
+    parsedData=null;formattedText='';setActions(false);emptyState.hidden=true;treeView.hidden=true;codeView.hidden=true;errorView.hidden=false;refreshSearch(true,false);
     const match=error.message.match(/position (\d+)/);let detail='';if(match){const pos=Number(match[1]);const before=input.value.slice(0,pos);detail=`第 ${before.split('\n').length} 行，第 ${pos-before.lastIndexOf('\n')} 列`}
     errorView.innerHTML=`<strong>无法解析这段 JSON</strong>${escapeHtml(error.message)}${detail?`<br>${detail}`:''}<br><br>请检查引号、逗号和括号是否完整。`;$('#outputStats').textContent='JSON 无效';
   }
 }
-function switchView(view){currentView=view;document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(!formattedText)return;treeView.hidden=view!=='tree';codeView.hidden=view!=='code';$('#expandButton').hidden=view!=='tree';$('#collapseButton').hidden=view!=='tree';}
+function switchView(view){currentView=view;document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(!formattedText)return;treeView.hidden=view!=='tree';codeView.hidden=view!=='code';$('#expandButton').hidden=view!=='tree';$('#collapseButton').hidden=view!=='tree';if(searchQuery)renderSearchHighlights(true);}
 function readFile(file){if(!file)return;if(file.size>5*1024*1024){toast('文件请勿超过 5 MB');return}const reader=new FileReader();reader.onload=()=>{input.value=reader.result;updateInputStats();formatJson()};reader.readAsText(file);}
 
 const diffLeft=$('#diffLeftInput');
@@ -311,7 +400,7 @@ function useCurrentTime(){const now=new Date();datetimeInput.value=localDatetime
 function updateCurrentClock(){const now=new Date();$('#currentTimeText').textContent=localDatetimeText(now);$('#currentSeconds').textContent=Math.floor(now.getTime()/1000);$('#currentMilliseconds').textContent=now.getTime()}
 async function copyTextValue(value,message){await navigator.clipboard.writeText(String(value));toast(message)}
 
-input.addEventListener('input',()=>{updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',()=>{$('#lineNumbers').scrollTop=input.scrollTop;inputHighlight.scrollTop=input.scrollTop;inputHighlight.scrollLeft=input.scrollLeft});
+input.addEventListener('input',()=>{inputSearchMatches=findTextMatches(input.value,searchQuery);renderedSearchKey=null;updateInputStats();clearTimeout(autoFormatTimer);if(input.value.trim())autoFormatTimer=setTimeout(()=>formatJson(false),350);else resetResult()});input.addEventListener('scroll',syncInputOverlay);
 ['click','keyup','select'].forEach(eventName=>input.addEventListener(eventName,()=>renderInputHighlight()));
 input.addEventListener('mousemove',event=>renderInputHighlight(hoveredInputPosition(event)));
 input.addEventListener('mouseleave',()=>renderInputHighlight());
@@ -321,9 +410,12 @@ $('#fileInput').addEventListener('change',e=>readFile(e.target.files[0]));
 document.querySelectorAll('.view-tab').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
 $('#expandButton').addEventListener('click',()=>{document.querySelectorAll('.children').forEach(n=>n.classList.remove('collapsed'));document.querySelectorAll('.toggle:not(.placeholder)').forEach(n=>n.textContent='▾')});
 $('#collapseButton').addEventListener('click',()=>{document.querySelectorAll('.children').forEach(n=>n.classList.add('collapsed'));document.querySelectorAll('.toggle:not(.placeholder)').forEach(n=>n.textContent='▸')});
-$('#searchInput').addEventListener('input',e=>{const q=e.target.value.trim().toLowerCase();document.querySelectorAll('.tree-row').forEach(row=>row.classList.toggle('match',!!q&&row.textContent.toLowerCase().includes(q)))});
+$('#searchInput').addEventListener('input',()=>refreshSearch(true));
+$('#searchInput').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();moveSearch(event.shiftKey?-1:1)}});
+$('#previousMatchButton').addEventListener('click',()=>moveSearch(-1));
+$('#nextMatchButton').addEventListener('click',()=>moveSearch(1));
 $('#copyButton').addEventListener('click',async()=>{await navigator.clipboard.writeText(formattedText);toast('已复制到剪贴板')});
-$('#minifyButton').addEventListener('click',()=>{formattedText=JSON.stringify(parsedData);codeView.querySelector('code').textContent=formattedText;toast('已压缩 JSON')});
+$('#minifyButton').addEventListener('click',()=>{formattedText=JSON.stringify(parsedData);refreshSearch(false);toast('已压缩 JSON')});
 $('#downloadButton').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([formattedText],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='formatted.json';a.click();URL.revokeObjectURL(url);toast('下载已开始')});
 $('#themeButton').addEventListener('click',()=>{document.body.classList.toggle('dark');localStorage.setItem('json-lens-theme',document.body.classList.contains('dark')?'dark':'light')});
 document.querySelectorAll('.mode-tab').forEach(button=>button.addEventListener('click',()=>switchMode(button.dataset.mode)));
